@@ -55,6 +55,7 @@ config/tts_config.json
 *.key
 *.secret
 config/*_config.json
+config/baidu_translate_config.py
 
 # 模型文件
 *.ckpt

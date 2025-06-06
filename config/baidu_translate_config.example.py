@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-百度翻译API配置文件
-请在此文件中填入您的百度翻译API配置信息
+百度翻译API配置文件模板
+请复制此文件为 baidu_translate_config.py 并填入您的实际配置信息
 """
 
 # 百度翻译API配置
@@ -18,11 +18,12 @@ BAIDU_TRANSLATE_CONFIG = {
 }
 
 # 使用说明：
-# 1. 访问 https://fanyi-api.baidu.com/
-# 2. 注册并登录百度开发者账号
-# 3. 创建翻译应用，获取APP ID和密钥
-# 4. 将上面的 'your_app_id_here' 和 'your_secret_key_here' 替换为实际值
-# 5. 保存文件后重启程序
+# 1. 复制此文件为 baidu_translate_config.py
+# 2. 访问 https://fanyi-api.baidu.com/
+# 3. 注册并登录百度开发者账号
+# 4. 创建翻译应用，获取APP ID和密钥
+# 5. 将上面的占位符替换为实际值
+# 6. 保存文件后重启程序
 
 # 注意事项：
 # - 百度翻译API有免费额度限制，超出后需要付费
