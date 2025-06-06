@@ -259,24 +259,24 @@ class StoryboardTab(QWidget):
                 QMessageBox.warning(self, "警告", "请先在设置中配置大模型")
                 return
             
-            # 初始化LLM API
-            if not self.llm_api:
-                all_model_configs = self.config_manager.config.get("models", [])
-                model_config = None
-                for cfg in all_model_configs:
-                    if cfg.get("name") == selected_model:
-                        model_config = cfg
-                        break
-                
-                if model_config:
-                    self.llm_api = LLMApi(
-                        api_type=model_config.get('type', 'deepseek'),
-                        api_key=model_config.get('key', ''),
-                        api_url=model_config.get('url', '')
-                    )
-                else:
-                    QMessageBox.warning(self, "错误", "模型配置不完整")
-                    return
+            # 初始化LLM API（每次都根据当前选择的模型重新创建）
+            all_model_configs = self.config_manager.config.get("models", [])
+            model_config = None
+            for cfg in all_model_configs:
+                if cfg.get("name") == selected_model:
+                    model_config = cfg
+                    break
+            
+            if model_config:
+                self.llm_api = LLMApi(
+                    api_type=model_config.get('type', 'deepseek'),
+                    api_key=model_config.get('key', ''),
+                    api_url=model_config.get('url', '')
+                )
+                logger.info(f"使用模型: {selected_model}, 类型: {model_config.get('type')}, URL: {model_config.get('url')}")
+            else:
+                QMessageBox.warning(self, "错误", "模型配置不完整")
+                return
             
             # 获取选择的风格
             selected_style = self.style_combo.currentText()
@@ -318,26 +318,26 @@ class StoryboardTab(QWidget):
             self.is_generating = True
             self.stop_generation = False
             
-            # 初始化LLM API（如果还没有初始化）
-            if not self.llm_api:
-                selected_model = self.model_combo.currentText()
-                all_model_configs = self.config_manager.config.get("models", [])
-                model_config = None
-                for cfg in all_model_configs:
-                    if cfg.get("name") == selected_model:
-                        model_config = cfg
-                        break
-                
-                if model_config:
-                    self.llm_api = LLMApi(
-                        api_type=model_config.get('type', 'deepseek'),
-                        api_key=model_config.get('key', ''),
-                        api_url=model_config.get('url', '')
-                    )
-                else:
-                    QMessageBox.warning(self, "错误", "模型配置不完整")
-                    self.is_generating = False
-                    return
+            # 初始化LLM API（每次都根据当前选择的模型重新创建）
+            selected_model = self.model_combo.currentText()
+            all_model_configs = self.config_manager.config.get("models", [])
+            model_config = None
+            for cfg in all_model_configs:
+                if cfg.get("name") == selected_model:
+                    model_config = cfg
+                    break
+            
+            if model_config:
+                self.llm_api = LLMApi(
+                    api_type=model_config.get('type', 'deepseek'),
+                    api_key=model_config.get('key', ''),
+                    api_url=model_config.get('url', '')
+                )
+                logger.info(f"使用模型: {selected_model}, 类型: {model_config.get('type')}, URL: {model_config.get('url')}")
+            else:
+                QMessageBox.warning(self, "错误", "模型配置不完整")
+                self.is_generating = False
+                return
             
             # 初始化文本解析器
             if not self.text_parser:
@@ -380,11 +380,25 @@ class StoryboardTab(QWidget):
         if self.is_generating:
             self.stop_generation = True
             logger.info("用户请求停止分镜生成")
+            
+            # 停止正在运行的线程
+            if hasattr(self, 'shots_thread') and self.shots_thread and self.shots_thread.isRunning():
+                logger.info("正在停止分镜生成线程")
+                self.shots_thread.cancel()  # 调用线程的取消方法
+                self.shots_thread.wait(3000)  # 等待最多3秒让线程正常结束
+                if self.shots_thread.isRunning():
+                    logger.warning("线程未能正常停止，强制终止")
+                    self.shots_thread.terminate()
+                    self.shots_thread.wait(1000)
+            
             # 立即更新按钮状态
             self.stop_generate_btn.setEnabled(False)
             self.stop_generate_btn.setText("正在停止...")
             # 显示停止消息
             self.show_progress("⏹️ 正在停止生成...")
+            
+            # 重置UI状态
+            self._reset_shots_ui()
     
     def show_progress(self, message="⏳ 处理中，请稍候..."):
         """显示进度条"""

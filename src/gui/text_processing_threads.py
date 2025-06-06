@@ -69,8 +69,14 @@ class ShotsGenerationThread(QThread):
             
             self.progress_updated.emit("正在生成分镜，请稍候...")
             
-            # 解析文本生成分镜
-            result = self.text_parser.parse_text(self.output_text)
+            # 创建进度回调函数，用于检查取消状态
+            def progress_callback(message):
+                if self.is_cancelled:
+                    raise InterruptedError("用户取消了分镜生成")
+                self.progress_updated.emit(message)
+            
+            # 解析文本生成分镜，传递进度回调
+            result = self.text_parser.parse_text(self.output_text, progress_callback=progress_callback)
             
             if self.is_cancelled:
                 return
@@ -87,6 +93,9 @@ class ShotsGenerationThread(QThread):
             else:
                 self.error_occurred.emit("未能从文本中解析出分镜信息，请检查输入或大模型输出。")
                 
+        except InterruptedError as e:
+            logger.info(f"分镜生成被用户取消: {str(e)}")
+            self.progress_updated.emit("⏹️ 分镜生成已取消")
         except Exception as e:
             if not self.is_cancelled:
                 error_msg = f"生成分镜时发生错误: {str(e)}"

@@ -70,6 +70,221 @@ QPushButton:hover {
     background: #1565c0;
 }
 
+QPushButton:disabled {
+    background: #bdbdbd;
+    color: #757575;
+}
+
+/* 设置界面样式 */
+.settings-group {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 8px 0;
+}
+
+.settings-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #1976d2;
+    margin-bottom: 12px;
+}
+
+.models-display {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 8px 0;
+    min-height: 80px;
+    font-family: "Consolas", "Monaco", monospace;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.primary-button {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                               stop: 0 #2196f3, stop: 1 #1976d2);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 14px;
+    min-width: 120px;
+}
+
+.primary-button:hover {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                               stop: 0 #1976d2, stop: 1 #1565c0);
+}
+
+.secondary-button {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                               stop: 0 #f5f5f5, stop: 1 #e0e0e0);
+    color: #424242;
+    border: 1px solid #bdbdbd;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.secondary-button:hover {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                               stop: 0 #e8e8e8, stop: 1 #d0d0d0);
+    border-color: #9e9e9e;
+}
+
+.danger-button {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                               stop: 0 #f44336, stop: 1 #d32f2f);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+
+.danger-button:hover {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                               stop: 0 #d32f2f, stop: 1 #c62828);
+}
+
+/* 模型管理对话框样式 */
+.model-dialog {
+    background: #fafafa;
+}
+
+.model-dialog QGroupBox {
+    font-weight: bold;
+    font-size: 14px;
+    color: #1976d2;
+    border: 2px solid #e3f2fd;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding-top: 8px;
+    background: white;
+}
+
+.model-dialog QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 8px 0 8px;
+    background: white;
+}
+
+.model-dialog QListWidget {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 4px;
+    selection-background-color: #e3f2fd;
+}
+
+.model-dialog QListWidget::item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 2px 0;
+}
+
+.model-dialog QListWidget::item:selected {
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                               stop: 0 #2196f3, stop: 1 #1976d2);
+    color: white;
+}
+
+.model-dialog QListWidget::item:hover {
+    background: #f5f5f5;
+}
+
+.model-dialog QLineEdit {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    background: white;
+}
+
+.model-dialog QLineEdit:focus {
+    border-color: #1976d2;
+    background: #fafafa;
+}
+
+.model-dialog QComboBox {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    min-width: 120px;
+}
+
+.model-dialog QComboBox:focus {
+    border-color: #1976d2;
+}
+
+.model-dialog QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+.model-dialog QComboBox::down-arrow {
+    image: none;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #666;
+    margin-right: 5px;
+}
+
+.model-dialog QTextEdit {
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.model-dialog QCheckBox {
+    font-size: 13px;
+    color: #424242;
+}
+
+.model-dialog QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #bdbdbd;
+    border-radius: 3px;
+    background: white;
+}
+
+.model-dialog QCheckBox::indicator:checked {
+    background: #1976d2;
+    border-color: #1976d2;
+    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOSIgdmlld0JveD0iMCAwIDEyIDkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xMC42IDEuNEw0LjIgNy44TDEuNCA1IiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K);
+}
+
+/* 输入框样式优化 */
+QLineEdit {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    background: white;
+}
+
+QLineEdit:focus {
+    border-color: #1976d2;
+    background: #fafafa;
+}
+
+QLineEdit:disabled {
+    background: #f5f5f5;
+    color: #9e9e9e;
+    border-color: #e0e0e0;
+}
+
 /* 功能导航按钮 */
 .nav-button {
     background: #1976d2;

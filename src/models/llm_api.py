@@ -38,7 +38,7 @@ class LLMApi:
             logger.error(f"Jieba分词模型初始化失败: {e}")
         
         # 文本分段配置
-        self.max_text_length = 1000  # 单次处理的最大文本长度（优化后降低阈值以提高分镜质量）
+        self.max_text_length = 5000  # 单次处理的最大文本长度（提高阈值确保完整文章能整体处理）
         self.overlap_length = 200    # 分段重叠长度，保证上下文连贯性
         self.summary_threshold = 8000  # 只有超过此长度才生成摘要（优化：减少不必要的摘要生成）
     
@@ -134,6 +134,52 @@ class LLMApi:
             
         # 去除多余的空行，保留段落间的单个换行
         lines = merged_text.split('\n')
+        cleaned_lines = []
+        prev_empty = False
+        
+        for line in lines:
+            line_stripped = line.strip()
+            if line_stripped:  # 非空行
+                cleaned_lines.append(line)
+                prev_empty = False
+            else:  # 空行
+                if not prev_empty:  # 只保留第一个空行
+                    cleaned_lines.append('')
+                prev_empty = True
+        
+        # 移除开头和结尾的空行
+        while cleaned_lines and not cleaned_lines[0].strip():
+            cleaned_lines.pop(0)
+        while cleaned_lines and not cleaned_lines[-1].strip():
+            cleaned_lines.pop()
+            
+        return '\n'.join(cleaned_lines)
+
+    def _remove_series_descriptions(self, text: str) -> str:
+        """
+        移除改写文本中可能出现的系列描述文本
+        """
+        if not text:
+            return text
+            
+        # 定义需要移除的系列描述模式
+        patterns_to_remove = [
+            r'本篇系长篇故事的第.{1,20}篇章[，。].*?[。！？]',
+            r'本篇系长文第.{1,20}篇[，。].*?[。！？]', 
+            r'本篇为系列长文之第.{1,20}篇章[，。].*?[。！？]',
+            r'这是一篇长文本的第.{1,20}部分[，。].*?[。！？]',
+            r'本文为.{1,30}系列.*?第.{1,20}部分[，。].*?[。！？]',
+            r'此为.{1,30}长篇.*?第.{1,20}章[，。].*?[。！？]'
+        ]
+        
+        import re
+        cleaned_text = text
+        
+        for pattern in patterns_to_remove:
+            cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.DOTALL)
+        
+        # 清理可能产生的多余空行
+        lines = cleaned_text.split('\n')
         cleaned_lines = []
         prev_empty = False
         
@@ -366,6 +412,8 @@ class LLMApi:
             "请严格按照以下Markdown表格格式输出，不要包含任何额外文字、解释或说明。\n"
             "表格必须包含以下列：文案、场景、角色、提示词、主图、视频运镜、音频、操作、备选图片。\n"
             "\n"
+            "**核心要求：必须严格按照用户提供的原文内容进行分镜，不得遗漏任何内容！**\n"
+            "\n"
             "**重要要求：请为文本内容生成尽可能多的分镜场景。每个重要的情节、对话、动作、情感变化都应该有对应的分镜。不要将多个场景合并到一个分镜中，而是要详细拆分。**\n"
             "\n"
             "**分镜数量指导原则：**\n"
@@ -373,11 +421,14 @@ class LLMApi:
             "- 每个对话回合应该有独立的分镜\n"
             "- 每个动作或情感变化应该有独立的分镜\n"
             "- 场景转换必须有独立的分镜\n"
+            "- 对于长文本，确保从开头到结尾的每一段内容都有对应的分镜\n"
             "\n"
-            "**内容完整性要求：**\n"
-            "- 必须覆盖用户提供文本的所有内容，不得遗漏任何段落或情节\n"
+            "**内容完整性要求（必须严格遵守）：**\n"
+            "- 必须覆盖用户提供文本的所有内容，从第一段到最后一段，不得遗漏任何段落或情节\n"
             "- 按照文本的时间顺序生成分镜，确保逻辑连贯\n"
-            "- 对于长文本，请特别注意后半部分内容的分镜生成\n"
+            "- 对于长文本，请特别注意中间部分和后半部分内容的分镜生成\n"
+            "- 生成分镜前，请先通读全文，确保理解了文本的完整结构和所有内容\n"
+            "- 文案列中的内容必须直接来源于原文，不能自行创作或概括\n"
             "\n"
             "请注意以下生成规则：\n"
             "1. **文案列**: 必须从用户提供的原始文本中提取相应的文案片段，每个分镜的文案应该是1-2句话的具体内容，不能使用数字编号。文案应该能够直接对应到原文的具体段落或句子。绝对不能填写1、2、3等数字！\n"
@@ -625,8 +676,10 @@ class LLMApi:
                     return error_msg
             except json.JSONDecodeError:
                 print(f"成功 (rewrite_text): 模型返回了纯文本字符串。")
+                # 移除可能的系列描述文本
+                cleaned_result = self._remove_series_descriptions(content_result)
                 # 去除多余的空行
-                return self._remove_extra_blank_lines(content_result) 
+                return self._remove_extra_blank_lines(cleaned_result) 
             
             print(f"警告 (rewrite_text): 模型返回了JSON字符串，但非分镜结构。对于改写任务，通常期望纯文本。")
             # 去除多余的空行
@@ -655,15 +708,8 @@ class LLMApi:
             if progress_callback:
                 progress_callback(f"正在处理第 {i+1}/{len(segments)} 段文本...")
             
-            # 为分段添加上下文提示
-            if len(segments) > 1:
-                context_prompt = f"这是一篇长文本的第{i+1}部分（共{len(segments)}部分），请保持与整体内容的连贯性。"
-                segment_with_context = f"{context_prompt}\n\n{segment}"
-            else:
-                segment_with_context = segment
-            
-            # 改写当前段落
-            rewritten_segment = self._rewrite_single_text(segment_with_context)
+            # 改写当前段落（不添加上下文提示，避免生成不必要的描述）
+            rewritten_segment = self._rewrite_single_text(segment)
             
             # 检查是否改写成功
             if rewritten_segment.startswith("API错误") or rewritten_segment.startswith("API返回错误"):
@@ -672,11 +718,8 @@ class LLMApi:
                     progress_callback(f"第 {i+1} 段处理失败，终止操作")
                 return f"分段改写失败：第 {i+1} 段处理时出错 - {rewritten_segment}"
             
-            # 移除上下文提示（如果存在）
-            if len(segments) > 1 and rewritten_segment.startswith("这是一篇长文本的第"):
-                lines = rewritten_segment.split('\n')
-                if len(lines) > 2:
-                    rewritten_segment = '\n'.join(lines[2:])  # 跳过上下文提示行
+            # 移除可能的系列描述文本
+            rewritten_segment = self._remove_series_descriptions(rewritten_segment)
             
             rewritten_segments.append(rewritten_segment)
             print(f"第 {i+1} 段改写完成，改写后长度: {len(rewritten_segment)}")

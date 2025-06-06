@@ -62,8 +62,8 @@ class TextParser:
         
         if self.llm_api and not is_table_format:
             try:
-                # 调用大模型生成分镜，传递风格参数
-                raw_llm_output = self.llm_api.generate_shots(text, self.style)
+                # 调用大模型生成分镜，传递风格参数和进度回调
+                raw_llm_output = self.llm_api.generate_shots(text, self.style, progress_callback)
                 logger.debug(f"Raw LLM Output for parsing:\n{raw_llm_output}")
                 
                 # 检查API返回的错误信息 - 更精确的错误检测

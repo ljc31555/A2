@@ -9,27 +9,29 @@ class ConfigManager:
 
     def _load_config(self):
         all_models = []
-        if os.path.exists(self.config_dir):
-            for fname in os.listdir(self.config_dir):
-                if fname.startswith("llm_") and fname.endswith(".json"):
-                    config_path = os.path.join(self.config_dir, fname)
-                    try:
-                        with open(config_path, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            # Check if the file contains a list of models under the 'models' key
-                            if isinstance(data, dict) and "models" in data and isinstance(data["models"], list):
-                                all_models.extend(data["models"])
-                                print(f"Loaded models list from {fname}")
-                            # Check if the file contains a single model configuration object
-                            elif isinstance(data, dict) and "name" in data:
-                                all_models.append(data)
-                                print(f"Loaded single model from {fname}: {data['name']}")
-                            else:
-                                print(f"Warning: File {fname} does not contain a valid model configuration (missing 'models' list or single model object with 'name').")
-                    except json.JSONDecodeError as e:
-                        print(f"Error decoding JSON from {fname}: {e}")
-                    except Exception as e:
-                        print(f"Error reading file {fname}: {e}")
+        # 只加载主配置文件，避免重复加载
+        main_config_path = os.path.join(self.config_dir, 'llm_config.json')
+        
+        if os.path.exists(main_config_path):
+            try:
+                with open(main_config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # Check if the file contains a list of models under the 'models' key
+                    if isinstance(data, dict) and "models" in data and isinstance(data["models"], list):
+                        # 去重处理：基于模型名称和类型去重
+                        seen_models = set()
+                        for model in data["models"]:
+                            model_key = (model.get("name", ""), model.get("type", ""))
+                            if model_key not in seen_models and model.get("name"):
+                                all_models.append(model)
+                                seen_models.add(model_key)
+                        print(f"Loaded {len(all_models)} unique models from main config")
+                    else:
+                        print(f"Warning: Main config file does not contain a valid models list.")
+            except json.JSONDecodeError as e:
+                print(f"Error decoding JSON from main config: {e}")
+            except Exception as e:
+                print(f"Error reading main config file: {e}")
 
         # If no config files are found, create a default one
         if not all_models:
@@ -213,6 +215,52 @@ class ConfigManager:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"保存TTS配置失败: {e}")
+    
+    def save_llm_config(self, config):
+        """保存LLM配置"""
+        try:
+            # 确保配置目录存在
+            os.makedirs(self.config_dir, exist_ok=True)
+            
+            # 更新内存中的配置
+            if 'models' in config:
+                if 'models' not in self.config:
+                    self.config['models'] = []
+                
+                # 合并新的模型配置
+                for model_name, model_info in config['models'].items():
+                    # 查找是否已存在同名模型（包括占位符版本）
+                    existing_indices = []
+                    for i, model in enumerate(self.config['models']):
+                        if model.get('name') == model_name:
+                            existing_indices.append(i)
+                    
+                    # 构建模型配置
+                    model_config = {
+                        'name': model_name,
+                        'type': model_info.get('type', 'openai'),
+                        'key': model_info.get('api_key', ''),
+                        'url': model_info.get('base_url', '')
+                    }
+                    
+                    # 删除所有同名的现有模型（包括占位符版本）
+                    for i in reversed(existing_indices):
+                        del self.config['models'][i]
+                    
+                    # 只有当API密钥不是占位符时才添加新配置
+                    api_key = model_config.get('key', '')
+                    if api_key and not api_key.startswith('YOUR_') and not api_key.endswith('_HERE'):
+                        self.config['models'].append(model_config)
+                    else:
+                        logger.warning(f"跳过保存模型 {model_name}：API密钥为空或为占位符")
+            
+            # 保存到文件
+            self._save_config()
+            return True
+            
+        except Exception as e:
+            print(f"保存LLM配置失败: {e}")
+            return False
     
     def get_tts_setting(self, key, default=None):
         """获取TTS配置项"""

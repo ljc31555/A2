@@ -35,49 +35,42 @@ class SettingsTab(QWidget):
         settings_layout = QVBoxLayout()
         settings_layout.addWidget(QLabel("设置区"))
 
-        # LLM Model Settings
-        model_settings_group = QGroupBox("大模型配置")
-        model_form = QFormLayout()
+        # 大模型配置区域
+        llm_group = QGroupBox("大模型配置")
+        llm_group.setObjectName("settings-group")
+        llm_layout = QVBoxLayout(llm_group)
         
-        self.model_name_input = QLineEdit()
-        self.model_name_input.setPlaceholderText("请输入大模型名称，如 通义千问")
-        self.model_name_input.setToolTip("输入大模型名称")
+        # 标题
+        models_label = QLabel("当前已配置模型")
+        models_label.setObjectName("settings-title")
         
-        self.model_url_input = QLineEdit()
-        self.model_url_input.setPlaceholderText("请输入大模型 API 地址")
-        self.model_url_input.setToolTip("输入大模型API地址")
+        # 当前已配置模型显示
+        self.models_display = QLabel("正在加载模型配置...")
+        self.models_display.setWordWrap(True)
+        self.models_display.setObjectName("models-display")
+        self.models_display.setMinimumHeight(100)
         
-        self.model_key_input = QLineEdit()
-        self.model_key_input.setPlaceholderText("请输入大模型 API KEY")
-        self.model_key_input.setEchoMode(QLineEdit.Password)
-        self.model_key_input.setToolTip("输入大模型API KEY")
-        
-        self.model_type_combo_settings = QComboBox()
-        self.model_type_combo_settings.addItems(["tongyi", "deepseek", "zhipu", "其他"])
-
-        model_form.addRow("大模型名称：", self.model_name_input)
-        model_form.addRow("模型API类型：", self.model_type_combo_settings)
-        model_form.addRow("大模型 API 地址：", self.model_url_input)
-        model_form.addRow("大模型 API KEY：", self.model_key_input)
-        
-        # 模型配置按钮布局
-        model_buttons_layout = QHBoxLayout()
-        
-        self.save_model_btn = QPushButton("保存模型配置")
-        self.save_model_btn.clicked.connect(self.save_model_config)
-        self.save_model_btn.setToolTip("保存大模型配置")
-        
-        self.manage_models_btn = QPushButton("管理所有模型")
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        self.manage_models_btn = QPushButton("管理模型")
+        self.manage_models_btn.setObjectName("primary-button")
         self.manage_models_btn.clicked.connect(self.open_model_manager)
         self.manage_models_btn.setToolTip("打开模型管理界面，可添加、编辑、删除多个大模型")
+        self.refresh_models_btn = QPushButton("刷新显示")
+        self.refresh_models_btn.setObjectName("secondary-button")
+        self.refresh_models_btn.clicked.connect(self.refresh_models_display)
+        self.refresh_models_btn.setToolTip("刷新模型显示")
         
-        model_buttons_layout.addWidget(self.save_model_btn)
-        model_buttons_layout.addWidget(self.manage_models_btn)
+        button_layout.addWidget(self.manage_models_btn)
+        button_layout.addWidget(self.refresh_models_btn)
+        button_layout.addStretch()
         
-        model_form.addRow(model_buttons_layout)
+        llm_layout.addWidget(models_label)
+        llm_layout.addWidget(self.models_display)
+        llm_layout.addLayout(button_layout)
+        llm_layout.setSpacing(12)
         
-        model_settings_group.setLayout(model_form)
-        settings_layout.addWidget(model_settings_group)
+        settings_layout.addWidget(llm_group)
 
         # General Settings
         general_settings_group = QGroupBox("通用设置")
@@ -108,21 +101,8 @@ class SettingsTab(QWidget):
     def load_settings(self):
         """加载设置"""
         try:
-            # 加载LLM配置
-            all_model_configs = self.config_manager.config.get("models", [])
-            if all_model_configs:
-                # 如果有模型配置，加载第一个模型的信息
-                first_model = all_model_configs[0]
-                
-                self.model_name_input.setText(first_model.get('name', ''))
-                self.model_url_input.setText(first_model.get('url', ''))
-                self.model_key_input.setText(first_model.get('key', ''))
-                
-                # 设置模型类型
-                model_type = first_model.get('type', 'tongyi')
-                index = self.model_type_combo_settings.findText(model_type)
-                if index >= 0:
-                    self.model_type_combo_settings.setCurrentIndex(index)
+            # 刷新模型显示
+            self.refresh_models_display()
             
             # 加载应用设置
             app_config = self.config_manager.config.get('app_settings', {})
@@ -133,46 +113,39 @@ class SettingsTab(QWidget):
         except Exception as e:
             logger.error(f"加载设置时发生错误: {e}")
     
-    def save_model_config(self):
-        """保存模型配置"""
+    def refresh_models_display(self):
+        """刷新模型显示"""
         try:
-            model_name = self.model_name_input.text().strip()
-            model_url = self.model_url_input.text().strip()
-            model_key = self.model_key_input.text().strip()
-            model_type = self.model_type_combo_settings.currentText()
-            
-            if not all([model_name, model_url, model_key]):
-                QMessageBox.warning(self, "警告", "请填写完整的模型配置信息")
-                return
-            
-            # 构建模型配置
-            model_config = {
-                'models': {
-                    model_name: {
-                        'api_key': model_key,
-                        'base_url': model_url,
-                        'model_name': model_name,
-                        'type': model_type
-                    }
-                }
-            }
-            
-            # 保存配置
-            success = self.config_manager.save_llm_config(model_config)
-            
-            if success:
-                QMessageBox.information(self, "成功", "模型配置已保存")
-                logger.info(f"模型配置已保存: {model_name}")
+            models = self.config_manager.config.get("models", [])
+            if models:
+                model_info_list = []
+                for i, model in enumerate(models, 1):
+                    name = model.get("name", "未知模型")
+                    model_type = model.get("type", "未知类型")
+                    url = model.get("url", "")
+                    key = model.get("key", "")
+                    
+                    # 隐藏API密钥，只显示前几位和后几位
+                    if key:
+                        if len(key) > 10:
+                            masked_key = key[:6] + "***" + key[-4:]
+                        else:
+                            masked_key = "***"
+                    else:
+                        masked_key = "未配置"
+                    
+                    model_info = f"{i}. {name} ({model_type})\n   API地址: {url}\n   API密钥: {masked_key}"
+                    model_info_list.append(model_info)
                 
-                # 通知父窗口更新模型列表
-                if hasattr(self.parent_window, 'refresh_model_list'):
-                    self.parent_window.refresh_model_list()
+                display_text = "\n\n".join(model_info_list)
+                self.models_display.setText(display_text)
             else:
-                QMessageBox.warning(self, "错误", "保存模型配置失败")
-                
+                self.models_display.setText("暂无已配置的模型\n\n点击'管理模型'按钮添加新的大模型配置")
         except Exception as e:
-            logger.error(f"保存模型配置时发生错误: {e}")
-            QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
+            logger.error(f"刷新模型显示失败: {e}")
+            self.models_display.setText(f"加载模型信息失败: {e}")
+    
+
     
     def save_general_settings(self):
         """保存通用设置"""
@@ -225,34 +198,20 @@ class SettingsTab(QWidget):
     def open_model_manager(self):
         """打开模型管理对话框"""
         try:
-            dialog = ModelManagerDialog(self)
-            # 连接信号，当模型更新时刷新父窗口的模型列表
-            dialog.models_updated.connect(self.on_models_updated)
+            dialog = ModelManagerDialog(self.config_manager, self)
+            # 连接模型更新信号
+            dialog.models_updated.connect(self.refresh_models_display)
             dialog.exec_()
         except Exception as e:
             logger.error(f"打开模型管理对话框失败: {e}")
-            QMessageBox.critical(self, "错误", f"无法打开模型管理界面: {str(e)}")
+            QMessageBox.critical(self, "错误", f"打开模型管理对话框失败: {e}")
     
-    def on_models_updated(self):
-        """模型配置更新后的回调"""
-        try:
-            # 重新加载配置
-            self.config_manager = ConfigManager()
-            self.load_settings()
-            
-            # 通知父窗口更新模型列表
-            if hasattr(self.parent_window, 'refresh_model_list'):
-                self.parent_window.refresh_model_list()
-                
-            logger.info("模型配置已更新")
-        except Exception as e:
-            logger.error(f"更新模型配置失败: {e}")
+
     
     def get_current_model_config(self):
-        """获取当前模型配置"""
-        return {
-            'name': self.model_name_input.text().strip(),
-            'url': self.model_url_input.text().strip(),
-            'key': self.model_key_input.text().strip(),
-            'type': self.model_type_combo_settings.currentText()
-        }
+        """获取当前模型配置（已废弃，现在通过模型管理对话框管理）"""
+        # 返回第一个配置的模型，如果有的话
+        models = self.config_manager.config.get("models", [])
+        if models:
+            return models[0]
+        return None

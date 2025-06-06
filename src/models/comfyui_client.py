@@ -512,44 +512,64 @@ class ComfyUIClient:
     def _translate_prompt(self, chinese_prompt: str) -> str:
         """
         将中文提示词翻译为英文
-        优先使用百度翻译API，如果失败则返回原始提示词
+        如果没有配置LLM API或翻译失败，返回原始提示词
         """
         logger.debug(f"开始翻译提示词，原始长度: {len(chinese_prompt)}")
         logger.debug(f"原始提示词: {chinese_prompt}")
         
-        # 导入百度翻译模块
+        if not self.llm_api:
+            logger.warning("未配置LLM API，无法翻译提示词，使用原始中文提示词")
+            return chinese_prompt
+            
         try:
-            from utils.baidu_translator import translate_text, is_configured
+            logger.debug("构建翻译提示")
+            # 构建翻译提示
+            translation_prompt = f"""
+请将以下中文图像生成提示词翻译成英文，保持原意和细节描述：
+
+{chinese_prompt}
+
+要求：
+1. 翻译要准确，保持原有的视觉描述细节
+2. 适合用于AI图像生成（如Stable Diffusion）
+3. 只返回翻译后的英文提示词，不要包含其他解释
+4. 保持专业的图像生成提示词格式
+"""
             
-            # 检查百度翻译是否已配置
-            if not is_configured():
-                logger.warning("百度翻译API未配置，使用原始中文提示词")
-                return chinese_prompt
+            messages = [
+                {"role": "system", "content": "你是一个专业的翻译专家，擅长将中文图像生成提示词翻译成适合AI图像生成的英文提示词。"},
+                {"role": "user", "content": translation_prompt}
+            ]
             
-            # 使用百度翻译API进行翻译
-            logger.debug("使用百度翻译API进行翻译")
-            translated_result = translate_text(chinese_prompt, from_lang='zh', to_lang='en')
+            logger.debug(f"准备调用LLM API进行翻译，模型: {self.llm_api.rewrite_model_name}")
             
-            if translated_result and translated_result.strip():
-                # 清理翻译结果，移除可能的多余空白
-                translated_prompt = translated_result.strip()
-                logger.info(f"百度翻译成功: {chinese_prompt[:50]}... -> {translated_prompt[:50]}...")
+            # 调用LLM API进行翻译
+            translated_result = self.llm_api._make_api_call(
+                self.llm_api.rewrite_model_name, 
+                messages, 
+                "translate_prompt"
+            )
+            
+            logger.debug(f"LLM API翻译响应: {translated_result}")
+            
+            if isinstance(translated_result, str) and translated_result.strip():
+                # 清理翻译结果，移除可能的引号和多余空白
+                translated_prompt = translated_result.strip().strip('"').strip("'")
+                logger.info(f"提示词翻译成功: {chinese_prompt[:50]}... -> {translated_prompt[:50]}...")
                 logger.debug(f"翻译后完整提示词: {translated_prompt}")
                 return translated_prompt
             else:
-                logger.warning("百度翻译返回空结果，使用原始中文提示词")
+                logger.warning(f"翻译失败，LLM返回无效结果: {translated_result}")
+                logger.warning("使用原始中文提示词")
                 return chinese_prompt
                 
-        except ImportError:
-            logger.error("无法导入百度翻译模块，使用原始中文提示词")
-            return chinese_prompt
         except Exception as e:
-            logger.error(f"百度翻译过程中发生错误: {e}")
+            logger.error(f"翻译提示词时发生错误: {e}")
             logger.error(f"错误类型: {type(e).__name__}")
             logger.error(f"错误详情: {str(e)}")
             import traceback
             logger.error(f"错误堆栈: {traceback.format_exc()}")
-            logger.warning("百度翻译失败，使用原始中文提示词")
+            logger.warning("翻译失败，使用原始中文提示词")
             return chinese_prompt
     
     def _get_output_dir(self, project_manager=None, current_project_name=None) -> str:
@@ -565,8 +585,13 @@ class ComfyUIClient:
             except Exception as e:
                 logger.warning(f"无法使用项目目录: {e}")
         
-        # 如果没有项目管理器或项目名称，抛出异常
-        raise ValueError("必须提供项目管理器和项目名称才能生成图片")
+        # 如果没有项目管理器或项目名称，使用默认的临时目录
+        logger.warning("没有项目管理器或项目名称，使用默认临时目录")
+        import tempfile
+        default_dir = os.path.join(tempfile.gettempdir(), 'comfyui_images')
+        os.makedirs(default_dir, exist_ok=True)
+        logger.info(f"使用默认图片目录: {default_dir}")
+        return default_dir
     
     def _download_image_to_local(self, image_path: str) -> str:
         """从ComfyUI服务器下载图片到本地项目目录"""

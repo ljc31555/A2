@@ -5,10 +5,10 @@ import shutil
 import time
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QScrollArea, QGridLayout, QMessageBox, QSizePolicy, QSpinBox, QCheckBox, QComboBox, QGroupBox
+    QScrollArea, QGridLayout, QMessageBox, QSizePolicy, QSpinBox, QComboBox, QCheckBox, QGroupBox
 )
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPixmap, QFont, QIntValidator
+from PyQt5.QtGui import QPixmap, QFont
 
 from utils.logger import logger
 from models.comfyui_client import ComfyUIClient
@@ -53,6 +53,7 @@ class AIDrawingTab(QWidget):
         engine_label = QLabel("生成引擎:")
         engine_layout.addWidget(engine_label)
         
+        from PyQt5.QtWidgets import QComboBox, QGroupBox
         self.engine_combo = QComboBox()
         self.engine_combo.addItem("Pollinations AI (免费)", "pollinations")
         self.engine_combo.addItem("ComfyUI (本地)", "comfyui")
@@ -91,17 +92,12 @@ class AIDrawingTab(QWidget):
         
         # Pollinations AI 设置区域
         self.pollinations_group = QGroupBox("Pollinations AI 设置")
-        self.pollinations_group.setObjectName("pollinations_group")
-        self.pollinations_group.setProperty("class", "pollinations-group")
         pollinations_group_layout = QVBoxLayout()
         
         # 模型选择
         model_layout = QHBoxLayout()
-        model_label = QLabel("模型:")
-        model_label.setProperty("class", "pollinations-label")
-        model_layout.addWidget(model_label)
+        model_layout.addWidget(QLabel("模型:"))
         self.pollinations_model_combo = QComboBox()
-        self.pollinations_model_combo.setProperty("class", "pollinations-combo")
         self.pollinations_model_combo.addItems(["flux", "flux-turbo", "gptimage"])
         self.pollinations_model_combo.setCurrentText("flux")  # 默认选择flux
         model_layout.addWidget(self.pollinations_model_combo)
@@ -109,75 +105,32 @@ class AIDrawingTab(QWidget):
         
         # 尺寸设置（宽度和高度）
         size_layout = QHBoxLayout()
-        width_label = QLabel("宽度:")
-        width_label.setProperty("class", "pollinations-label")
-        size_layout.addWidget(width_label)
+        size_layout.addWidget(QLabel("宽度:"))
         self.pollinations_width_spin = QSpinBox()
-        self.pollinations_width_spin.setProperty("class", "pollinations-spinbox")
         self.pollinations_width_spin.setRange(256, 2048)
         self.pollinations_width_spin.setValue(1024)
         self.pollinations_width_spin.setSingleStep(64)
         size_layout.addWidget(self.pollinations_width_spin)
         
-        height_label = QLabel("高度:")
-        height_label.setProperty("class", "pollinations-label")
-        size_layout.addWidget(height_label)
+        size_layout.addWidget(QLabel("高度:"))
         self.pollinations_height_spin = QSpinBox()
-        self.pollinations_height_spin.setProperty("class", "pollinations-spinbox")
         self.pollinations_height_spin.setRange(256, 2048)
         self.pollinations_height_spin.setValue(1024)
         self.pollinations_height_spin.setSingleStep(64)
         size_layout.addWidget(self.pollinations_height_spin)
         pollinations_group_layout.addLayout(size_layout)
         
-        # 种子设置 - 改进版本
-        seed_layout = QVBoxLayout()
-        
-        # 种子模式选择
-        seed_mode_layout = QHBoxLayout()
-        seed_mode_label = QLabel("种子模式:")
-        seed_mode_label.setProperty("class", "pollinations-label")
-        seed_mode_layout.addWidget(seed_mode_label)
-        self.pollinations_seed_mode_combo = QComboBox()
-        self.pollinations_seed_mode_combo.setProperty("class", "pollinations-combo")
-        self.pollinations_seed_mode_combo.addItem("随机生成", "random")
-        self.pollinations_seed_mode_combo.addItem("固定种子", "fixed")
-        self.pollinations_seed_mode_combo.setCurrentIndex(0)  # 默认随机
-        self.pollinations_seed_mode_combo.currentTextChanged.connect(self.on_seed_mode_changed)
-        seed_mode_layout.addWidget(self.pollinations_seed_mode_combo)
-        seed_mode_layout.addStretch()
-        seed_layout.addLayout(seed_mode_layout)
-        
-        # 种子值输入（仅在固定模式下显示）
-        self.seed_value_layout = QHBoxLayout()
-        seed_value_label = QLabel("种子值:")
-        seed_value_label.setProperty("class", "pollinations-label")
-        self.seed_value_layout.addWidget(seed_value_label)
+        # 种子设置
+        seed_layout = QHBoxLayout()
+        seed_layout.addWidget(QLabel("种子:"))
         self.pollinations_seed_edit = QLineEdit()
-        self.pollinations_seed_edit.setProperty("class", "pollinations-lineedit")
-        self.pollinations_seed_edit.setPlaceholderText("请输入种子值（正整数）")
-        self.pollinations_seed_edit.setValidator(QIntValidator(0, 2147483647))  # 限制为正整数
-        self.seed_value_layout.addWidget(self.pollinations_seed_edit)
-        
-        # 随机生成按钮
-        self.generate_seed_btn = QPushButton("随机生成")
-        self.generate_seed_btn.setProperty("class", "pollinations-random-btn")
-        self.generate_seed_btn.clicked.connect(self.generate_random_seed)
-        self.generate_seed_btn.setMaximumWidth(80)
-        self.seed_value_layout.addWidget(self.generate_seed_btn)
-        
-        # 创建种子值容器widget
-        self.seed_value_widget = QWidget()
-        self.seed_value_widget.setLayout(self.seed_value_layout)
-        seed_layout.addWidget(self.seed_value_widget)
-        
+        self.pollinations_seed_edit.setPlaceholderText("-1则随机生成")
+        seed_layout.addWidget(self.pollinations_seed_edit)
         pollinations_group_layout.addLayout(seed_layout)
         
-        # 其他选项
+        # 复选框选项
         self.pollinations_enhance_check = QCheckBox("启用增强 (Enhance)")
-        self.pollinations_enhance_check.setProperty("class", "pollinations-enhance-checkbox")
         self.pollinations_logo_check = QCheckBox("添加Logo水印")
-        self.pollinations_logo_check.setProperty("class", "pollinations-logo-checkbox")
         pollinations_group_layout.addWidget(self.pollinations_enhance_check)
         pollinations_group_layout.addWidget(self.pollinations_logo_check)
         
@@ -226,7 +179,6 @@ class AIDrawingTab(QWidget):
         
         # 初始化界面显示状态
         self.on_engine_changed()
-        self.on_seed_mode_changed()  # 初始化种子设置显示状态
         
     def on_engine_changed(self):
         """当引擎选择改变时调用"""
@@ -282,26 +234,6 @@ class AIDrawingTab(QWidget):
             self.connect_comfyui_btn.setEnabled(True)
             self.connect_comfyui_btn.setText("连接 ComfyUI")
     
-    def on_seed_mode_changed(self):
-        """当种子模式改变时调用"""
-        if not hasattr(self, 'pollinations_seed_mode_combo'):
-            return
-            
-        selected_mode = self.pollinations_seed_mode_combo.currentData()
-        
-        # 根据选择的模式显示/隐藏种子值输入区域
-        if selected_mode == "fixed":
-            self.seed_value_widget.setVisible(True)
-        else:  # random
-            self.seed_value_widget.setVisible(False)
-            self.pollinations_seed_edit.clear()  # 清空种子值
-    
-    def generate_random_seed(self):
-        """生成随机种子值"""
-        import random
-        random_seed = random.randint(1, 2147483647)
-        self.pollinations_seed_edit.setText(str(random_seed))
-    
     def handle_generate_image_btn(self):
         """处理生成图片按钮点击"""
         import traceback
@@ -349,10 +281,6 @@ class AIDrawingTab(QWidget):
             QMessageBox.warning(self, "服务不可用", "图像生成服务初始化失败")
             return
         
-        # 获取Pollinations AI参数
-        generation_params = self._get_pollinations_params()
-        logger.info(f"Pollinations AI 生成参数: {generation_params}")
-        
         # 更新UI状态
         self.generate_image_btn.setEnabled(False)
         self.generate_image_btn.setText("生成中...")
@@ -367,57 +295,11 @@ class AIDrawingTab(QWidget):
         current_project_name = getattr(self.parent(), 'current_project_name', None)
         
         self.image_generation_thread = ImageGenerationThread(
-            prompt, generation_params=generation_params, project_manager=project_manager, current_project_name=current_project_name
+            self.image_generation_service, prompt, project_manager=project_manager, current_project_name=current_project_name
         )
-        self.image_generation_thread.set_image_service(self.image_generation_service)
         self.image_generation_thread.image_generated.connect(self.on_image_generated)
         self.image_generation_thread.error_occurred.connect(self.on_image_generation_error)
         self.image_generation_thread.start()
-    
-    def _get_pollinations_params(self):
-        """获取Pollinations AI生成参数"""
-        import random
-        
-        params = {
-            'model': self.pollinations_model_combo.currentText(),
-            'width': self.pollinations_width_spin.value(),
-            'height': self.pollinations_height_spin.value(),
-            'enhance': self.pollinations_enhance_check.isChecked(),
-            'nologo': not self.pollinations_logo_check.isChecked()  # nologo与添加logo相反
-        }
-        
-        # 处理种子参数
-        seed_mode = self.pollinations_seed_mode_combo.currentData()
-        if seed_mode == "fixed":
-            seed_text = self.pollinations_seed_edit.text().strip()
-            if seed_text:
-                try:
-                    params['seed'] = int(seed_text)
-                    logger.info(f"使用固定种子值: {params['seed']}")
-                except ValueError:
-                    logger.warning(f"种子值格式错误: {seed_text}，将生成随机种子")
-                    # 生成随机种子并显示在输入框中
-                    random_seed = random.randint(1, 2147483647)
-                    params['seed'] = random_seed
-                    self.pollinations_seed_edit.setText(str(random_seed))
-                    logger.info(f"已生成随机种子值: {random_seed}")
-            else:
-                # 输入框为空时生成随机种子
-                random_seed = random.randint(1, 2147483647)
-                params['seed'] = random_seed
-                self.pollinations_seed_edit.setText(str(random_seed))
-                logger.info(f"输入框为空，已生成随机种子值: {random_seed}")
-        else:
-            # 随机模式：生成真实的随机种子值
-            random_seed = random.randint(1, 2147483647)
-            params['seed'] = random_seed
-            logger.info(f"随机模式，已生成随机种子值: {random_seed}")
-        
-        return params
-    
-    def get_current_pollinations_settings(self):
-        """获取当前Pollinations AI设置（供其他模块调用）"""
-        return self._get_pollinations_params()
     
     def _generate_with_comfyui(self, prompt):
         """使用 ComfyUI 生成图片"""
@@ -690,14 +572,6 @@ class AIDrawingTab(QWidget):
     def get_workflow_panel(self):
         """获取工作流面板实例"""
         return self.workflow_panel
-    
-    def get_current_engine_name(self):
-        """获取当前选择的引擎名称"""
-        try:
-            return self.engine_combo.currentData()
-        except Exception as e:
-            logger.error(f"获取当前引擎名称失败: {e}")
-            return "pollinations"  # 默认返回pollinations
     
     def get_current_settings(self):
         """获取当前绘图设置"""

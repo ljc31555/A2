@@ -6,7 +6,7 @@ import json
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QComboBox, QFormLayout, QGroupBox, QMessageBox, QListWidget, QListWidgetItem,
-    QSplitter, QTextEdit, QCheckBox, QProgressDialog
+    QSplitter, QTextEdit, QCheckBox, QProgressDialog, QWidget
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
@@ -21,14 +21,13 @@ class ModelManagerDialog(QDialog):
     # 信号：模型配置更新
     models_updated = pyqtSignal()
     
-    def __init__(self, parent=None):
+    def __init__(self, config_manager, parent=None):
         super().__init__(parent)
-        self.parent_window = parent
-        self.config_manager = ConfigManager()
-        
-        self.setWindowTitle("大模型管理")
+        self.config_manager = config_manager
+        self.setWindowTitle("模型管理")
         self.setModal(True)
-        self.resize(800, 600)
+        self.resize(900, 700)
+        self.setObjectName("model-dialog")
         
         self.init_ui()
         self.load_models()
@@ -47,77 +46,95 @@ class ModelManagerDialog(QDialog):
         splitter = QSplitter(Qt.Horizontal)
         
         # 左侧：模型列表
-        left_widget = QGroupBox("已配置的模型")
-        left_layout = QVBoxLayout()
+        left_group = QGroupBox("模型列表")
+        left_layout = QVBoxLayout(left_group)
         
         self.model_list = QListWidget()
         self.model_list.itemClicked.connect(self.on_model_selected)
+        self.model_list.setMinimumWidth(250)
         left_layout.addWidget(self.model_list)
         
-        # 模型列表操作按钮
-        list_buttons_layout = QHBoxLayout()
-        self.add_model_btn = QPushButton("添加新模型")
+        # 模型操作按钮
+        model_buttons_layout = QHBoxLayout()
+        self.add_model_btn = QPushButton("添加模型")
+        self.add_model_btn.setObjectName("primary-button")
         self.add_model_btn.clicked.connect(self.add_new_model)
         self.delete_model_btn = QPushButton("删除模型")
+        self.delete_model_btn.setObjectName("danger-button")
         self.delete_model_btn.clicked.connect(self.delete_model)
-        self.delete_model_btn.setEnabled(False)
         
-        list_buttons_layout.addWidget(self.add_model_btn)
-        list_buttons_layout.addWidget(self.delete_model_btn)
-        left_layout.addLayout(list_buttons_layout)
+        model_buttons_layout.addWidget(self.add_model_btn)
+        model_buttons_layout.addWidget(self.delete_model_btn)
+        left_layout.addLayout(model_buttons_layout)
+        left_layout.setSpacing(12)
         
-        left_widget.setLayout(left_layout)
+        left_widget = left_group
         splitter.addWidget(left_widget)
         
-        # 右侧：模型配置详情
-        right_widget = QGroupBox("模型配置详情")
-        right_layout = QVBoxLayout()
+        # 右侧：模型配置
+        right_group = QGroupBox("模型配置")
+        right_layout = QVBoxLayout(right_group)
         
-        # 配置表单
+        # 模型配置表单
         form_layout = QFormLayout()
+        form_layout.setSpacing(12)
+        form_layout.setVerticalSpacing(16)
         
-        self.model_name_input = QLineEdit()
-        self.model_name_input.setPlaceholderText("请输入模型名称，如：智谱AI")
-        self.model_name_input.textChanged.connect(self.on_config_changed)
+        self.model_name_edit = QLineEdit()
+        self.model_name_edit.textChanged.connect(self.on_config_changed)
+        self.model_name_edit.setPlaceholderText("请输入模型名称")
+        form_layout.addRow("模型名称:", self.model_name_edit)
         
-        self.model_type_combo = QComboBox()
-        self.model_type_combo.addItems(["tongyi", "deepseek", "zhipu", "其他"])
-        self.model_type_combo.currentTextChanged.connect(self.on_type_changed)
+        self.api_type_combo = QComboBox()
+        self.api_type_combo.addItems(["OpenAI", "Claude", "Gemini", "Deepseek", "Qwen", "GLM", "Custom"])
+        self.api_type_combo.currentTextChanged.connect(self.update_preset_info)
+        self.api_type_combo.currentTextChanged.connect(self.on_config_changed)
+        form_layout.addRow("API类型:", self.api_type_combo)
         
-        self.model_url_input = QLineEdit()
-        self.model_url_input.setPlaceholderText("请输入API地址")
-        self.model_url_input.textChanged.connect(self.on_config_changed)
+        self.api_url_edit = QLineEdit()
+        self.api_url_edit.textChanged.connect(self.on_config_changed)
+        self.api_url_edit.setPlaceholderText("请输入API地址")
+        form_layout.addRow("API地址:", self.api_url_edit)
         
-        self.model_key_input = QLineEdit()
-        self.model_key_input.setPlaceholderText("请输入API Key")
-        self.model_key_input.setEchoMode(QLineEdit.Password)
-        self.model_key_input.textChanged.connect(self.on_config_changed)
+        self.api_key_edit = QLineEdit()
+        self.api_key_edit.setEchoMode(QLineEdit.Password)
+        self.api_key_edit.textChanged.connect(self.on_config_changed)
+        self.api_key_edit.setPlaceholderText("请输入API密钥")
+        
+        # API Key输入框和显示开关
+        key_layout = QHBoxLayout()
+        key_layout.addWidget(self.api_key_edit)
         
         self.show_key_checkbox = QCheckBox("显示API Key")
         self.show_key_checkbox.toggled.connect(self.toggle_key_visibility)
+        key_layout.addWidget(self.show_key_checkbox)
         
-        form_layout.addRow("模型名称：", self.model_name_input)
-        form_layout.addRow("模型类型：", self.model_type_combo)
-        form_layout.addRow("API地址：", self.model_url_input)
-        form_layout.addRow("API Key：", self.model_key_input)
-        form_layout.addRow("", self.show_key_checkbox)
+        key_widget = QWidget()
+        key_widget.setLayout(key_layout)
+        form_layout.addRow("API Key:", key_widget)
         
         right_layout.addLayout(form_layout)
         
         # 预设配置说明
+        info_label = QLabel("配置说明：")
+        info_label.setStyleSheet("font-weight: bold; margin-top: 16px;")
         self.preset_info = QTextEdit()
         self.preset_info.setMaximumHeight(120)
         self.preset_info.setReadOnly(True)
-        right_layout.addWidget(QLabel("配置说明："))
+        right_layout.addWidget(info_label)
         right_layout.addWidget(self.preset_info)
         
         # 配置操作按钮
         config_buttons_layout = QHBoxLayout()
+        config_buttons_layout.setSpacing(12)
+        
         self.save_config_btn = QPushButton("保存配置")
+        self.save_config_btn.setObjectName("primary-button")
         self.save_config_btn.clicked.connect(self.save_current_config)
         self.save_config_btn.setEnabled(False)
         
         self.test_config_btn = QPushButton("测试连接")
+        self.test_config_btn.setObjectName("secondary-button")
         self.test_config_btn.clicked.connect(self.test_connection)
         self.test_config_btn.setEnabled(False)
         
@@ -125,8 +142,9 @@ class ModelManagerDialog(QDialog):
         config_buttons_layout.addWidget(self.test_config_btn)
         config_buttons_layout.addStretch()
         right_layout.addLayout(config_buttons_layout)
+        right_layout.setSpacing(16)
         
-        right_widget.setLayout(right_layout)
+        right_widget = right_group
         splitter.addWidget(right_widget)
         
         # 设置分割器比例
@@ -135,11 +153,18 @@ class ModelManagerDialog(QDialog):
         
         # 底部按钮
         bottom_layout = QHBoxLayout()
+        bottom_layout.setContentsMargins(16, 16, 16, 16)
+        
         self.close_btn = QPushButton("关闭")
+        self.close_btn.setObjectName("secondary-button")
         self.close_btn.clicked.connect(self.accept)
+        self.close_btn.setMinimumWidth(100)
+        
         bottom_layout.addStretch()
         bottom_layout.addWidget(self.close_btn)
+        
         layout.addLayout(bottom_layout)
+        layout.setSpacing(16)
         
         self.setLayout(layout)
         
@@ -177,15 +202,15 @@ class ModelManagerDialog(QDialog):
         self.current_model = model_data
         
         # 填充配置信息
-        self.model_name_input.setText(model_data.get("name", ""))
-        self.model_url_input.setText(model_data.get("url", ""))
-        self.model_key_input.setText(model_data.get("key", ""))
+        self.model_name_edit.setText(model_data.get("name", ""))
+        self.api_url_edit.setText(model_data.get("url", ""))
+        self.api_key_edit.setText(model_data.get("key", ""))
         
         # 设置模型类型
-        model_type = model_data.get("type", "tongyi")
-        index = self.model_type_combo.findText(model_type)
+        model_type = model_data.get("type", "OpenAI")
+        index = self.api_type_combo.findText(model_type)
         if index >= 0:
-            self.model_type_combo.setCurrentIndex(index)
+            self.api_type_combo.setCurrentIndex(index)
         
         # 更新预设信息
         self.update_preset_info(model_type)
@@ -194,36 +219,47 @@ class ModelManagerDialog(QDialog):
         self.delete_model_btn.setEnabled(True)
         self.test_config_btn.setEnabled(True)
         
-    def on_type_changed(self, model_type):
-        """模型类型改变事件"""
-        self.update_preset_info(model_type)
-        self.on_config_changed()
-        
-        # 根据类型自动填充URL
-        if model_type == "tongyi":
-            self.model_url_input.setText("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
-        elif model_type == "deepseek":
-            self.model_url_input.setText("https://api.deepseek.com/v1/chat/completions")
-        elif model_type == "zhipu":
-            self.model_url_input.setText("https://open.bigmodel.cn/api/paas/v4/chat/completions")
-    
     def update_preset_info(self, model_type):
         """更新预设配置信息"""
         info_text = ""
         
-        if model_type == "tongyi":
-            info_text = """通义千问配置说明：
-• API地址：https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
-• 需要阿里云API Key
-• 支持模型：qwen-plus, qwen-turbo等
-• 获取API Key：https://dashscope.console.aliyun.com/"""
-        elif model_type == "deepseek":
+        if model_type == "OpenAI":
+            self.api_url_edit.setText("https://api.openai.com/v1/chat/completions")
+            info_text = """OpenAI配置说明：
+• API地址：https://api.openai.com/v1/chat/completions
+• 需要OpenAI API Key
+• 支持模型：gpt-3.5-turbo, gpt-4等
+• 获取API Key：https://platform.openai.com/"""
+        elif model_type == "Claude":
+            self.api_url_edit.setText("https://api.anthropic.com/v1/messages")
+            info_text = """Claude配置说明：
+• API地址：https://api.anthropic.com/v1/messages
+• 需要Anthropic API Key
+• 支持模型：claude-3-sonnet, claude-3-haiku等
+• 获取API Key：https://console.anthropic.com/"""
+        elif model_type == "Gemini":
+            self.api_url_edit.setText("https://generativelanguage.googleapis.com/v1beta/models")
+            info_text = """Gemini配置说明：
+• API地址：https://generativelanguage.googleapis.com/v1beta/models
+• 需要Google API Key
+• 支持模型：gemini-pro, gemini-pro-vision等
+• 获取API Key：https://makersuite.google.com/"""
+        elif model_type == "Deepseek":
+            self.api_url_edit.setText("https://api.deepseek.com/v1/chat/completions")
             info_text = """DeepSeek配置说明：
 • API地址：https://api.deepseek.com/v1/chat/completions
 • 需要DeepSeek API Key
 • 支持模型：deepseek-chat
 • 获取API Key：https://platform.deepseek.com/"""
-        elif model_type == "zhipu":
+        elif model_type == "Qwen":
+            self.api_url_edit.setText("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
+            info_text = """通义千问配置说明：
+• API地址：https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+• 需要阿里云API Key
+• 支持模型：qwen-plus, qwen-turbo等
+• 获取API Key：https://dashscope.console.aliyun.com/"""
+        elif model_type == "GLM":
+            self.api_url_edit.setText("https://open.bigmodel.cn/api/paas/v4/chat/completions")
             info_text = """智谱AI配置说明：
 • API地址：https://open.bigmodel.cn/api/paas/v4/chat/completions
 • 需要智谱AI API Key
@@ -231,6 +267,7 @@ class ModelManagerDialog(QDialog):
 • 获取API Key：https://open.bigmodel.cn/
 • GLM-4-Flash目前免费使用"""
         else:
+            self.api_url_edit.setText("")
             info_text = """自定义模型配置说明：
 • 请确保API地址格式正确
 • API Key格式通常为：sk-xxxxxxxx
@@ -242,28 +279,28 @@ class ModelManagerDialog(QDialog):
         """配置改变事件"""
         # 检查是否有未保存的更改
         if self.current_model:
-            name_changed = self.model_name_input.text().strip() != self.current_model.get("name", "")
-            url_changed = self.model_url_input.text().strip() != self.current_model.get("url", "")
-            key_changed = self.model_key_input.text().strip() != self.current_model.get("key", "")
-            type_changed = self.model_type_combo.currentText() != self.current_model.get("type", "")
+            name_changed = self.model_name_edit.text().strip() != self.current_model.get("name", "")
+            url_changed = self.api_url_edit.text().strip() != self.current_model.get("url", "")
+            key_changed = self.api_key_edit.text().strip() != self.current_model.get("key", "")
+            type_changed = self.api_type_combo.currentText() != self.current_model.get("type", "")
             
             has_changes = name_changed or url_changed or key_changed or type_changed
             self.save_config_btn.setEnabled(has_changes and self.is_config_valid())
     
     def is_config_valid(self):
         """检查配置是否有效"""
-        name = self.model_name_input.text().strip()
-        url = self.model_url_input.text().strip()
-        key = self.model_key_input.text().strip()
+        name = self.model_name_edit.text().strip()
+        url = self.api_url_edit.text().strip()
+        key = self.api_key_edit.text().strip()
         
         return bool(name and url and key)
     
     def toggle_key_visibility(self, checked):
         """切换API Key显示/隐藏"""
         if checked:
-            self.model_key_input.setEchoMode(QLineEdit.Normal)
+            self.api_key_edit.setEchoMode(QLineEdit.Normal)
         else:
-            self.model_key_input.setEchoMode(QLineEdit.Password)
+            self.api_key_edit.setEchoMode(QLineEdit.Password)
     
     def add_new_model(self):
         """添加新模型"""
@@ -288,8 +325,8 @@ class ModelManagerDialog(QDialog):
         self.on_model_selected(self.model_list.item(self.model_list.count() - 1))
         
         # 聚焦到名称输入框
-        self.model_name_input.selectAll()
-        self.model_name_input.setFocus()
+        self.model_name_edit.selectAll()
+        self.model_name_edit.setFocus()
     
     def delete_model(self):
         """删除模型"""
@@ -340,10 +377,10 @@ class ModelManagerDialog(QDialog):
             
         try:
             # 更新当前模型配置
-            self.current_model["name"] = self.model_name_input.text().strip()
-            self.current_model["type"] = self.model_type_combo.currentText()
-            self.current_model["url"] = self.model_url_input.text().strip()
-            self.current_model["key"] = self.model_key_input.text().strip()
+            self.current_model["name"] = self.model_name_edit.text().strip()
+            self.current_model["type"] = self.api_type_combo.currentText()
+            self.current_model["url"] = self.api_url_edit.text().strip()
+            self.current_model["key"] = self.api_key_edit.text().strip()
             
             # 保存到文件
             self.save_config_to_file()
@@ -381,10 +418,10 @@ class ModelManagerDialog(QDialog):
             return
             
         # 获取配置信息
-        model_name = self.model_name_input.text().strip()
-        model_type = self.model_type_combo.currentText()
-        model_url = self.model_url_input.text().strip()
-        model_key = self.model_key_input.text().strip()
+        model_name = self.model_name_edit.text().strip()
+        model_type = self.api_type_combo.currentText()
+        model_url = self.api_url_edit.text().strip()
+        model_key = self.api_key_edit.text().strip()
         
         # 创建进度对话框
         progress_dialog = QProgressDialog("正在测试连接...", "取消", 0, 0, self)
