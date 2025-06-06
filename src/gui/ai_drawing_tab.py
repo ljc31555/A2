@@ -126,6 +126,14 @@ class AIDrawingTab(QWidget):
         self.pollinations_seed_edit = QLineEdit()
         self.pollinations_seed_edit.setPlaceholderText("-1则随机生成")
         seed_layout.addWidget(self.pollinations_seed_edit)
+        
+        # 添加随机种子按钮
+        pollinations_random_seed_btn = QPushButton("随机")
+        pollinations_random_seed_btn.setMaximumWidth(60)
+        pollinations_random_seed_btn.setProperty("class", "pollinations-random-btn")
+        pollinations_random_seed_btn.clicked.connect(self.generate_pollinations_random_seed)
+        seed_layout.addWidget(pollinations_random_seed_btn)
+        
         pollinations_group_layout.addLayout(seed_layout)
         
         # 复选框选项
@@ -795,3 +803,57 @@ class AIDrawingTab(QWidget):
         """重置UI状态"""
         self.generate_image_btn.setEnabled(True)
         self.generate_image_btn.setText("生成图片")
+    
+    def get_current_pollinations_settings(self):
+        """获取当前Pollinations AI设置"""
+        try:
+            # 获取种子值
+            seed_text = self.pollinations_seed_edit.text().strip()
+            seed = None
+            if seed_text:
+                if seed_text == "-1":
+                    seed = "random"  # Pollinations AI使用"random"表示随机种子
+                else:
+                    try:
+                        seed = int(seed_text)
+                    except ValueError:
+                        seed = "random"  # 如果输入无效，使用随机种子
+            else:
+                seed = "random"  # 空输入默认使用随机种子
+            
+            settings = {
+                'model': self.pollinations_model_combo.currentText(),
+                'width': self.pollinations_width_spin.value(),
+                'height': self.pollinations_height_spin.value(),
+                'seed': seed,
+                'enhance': self.pollinations_enhance_check.isChecked(),
+                'nologo': not self.pollinations_logo_check.isChecked()  # nologo与添加Logo水印相反
+            }
+            
+            logger.info(f"获取Pollinations设置: {settings}")
+            return settings
+            
+        except Exception as e:
+            logger.error(f"获取Pollinations设置失败: {e}")
+            # 返回默认设置
+            return {
+                'model': 'flux',
+                'width': 1024,
+                'height': 1024,
+                'seed': 'random',
+                'enhance': False,
+                'nologo': True
+            }
+    
+    def generate_pollinations_random_seed(self):
+        """生成Pollinations AI随机种子值"""
+        try:
+            import random
+            # 生成一个随机种子值（0到2147483647之间）
+            random_seed = random.randint(0, 2147483647)
+            self.pollinations_seed_edit.setText(str(random_seed))
+            logger.info(f"生成Pollinations随机种子: {random_seed}")
+        except Exception as e:
+            logger.error(f"生成Pollinations随机种子失败: {e}")
+            # 如果生成失败，设置为-1（随机）
+            self.pollinations_seed_edit.setText("-1")
