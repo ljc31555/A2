@@ -1,0 +1,642 @@
+/* AI视频生成系统 - 统一样式文件 */
+
+/* 全局样式 */
+QWidget {
+    font-family: "Microsoft YaHei", "微软雅黑", "Segoe UI", Arial, sans-serif;
+    font-size: 15px;
+    background: #f6f8fa;
+}
+
+QMainWindow {
+    background: #f6f8fa;
+}
+
+/* 顶部栏 */
+#top_bar {
+    background: #1976d2;
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 8px;
+}
+
+/* 底部栏 */
+#bottom_bar {
+    background: #f0f4f8;
+    border-radius: 8px;
+}
+
+/* 标签页样式 */
+QTabWidget::pane {
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+}
+
+QTabBar::tab {
+    background: #e9ecef;
+    border-radius: 8px 8px 0 0;
+    padding: 8px 20px;
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected {
+    background: #1976d2;
+    color: white;
+}
+
+/* 导航栏 */
+QListWidget {
+    background:rgb(0, 64, 182);
+    border-radius: 8px;
+}
+
+QListWidget::item:selected {
+    background: #1976d2;
+    color: white;
+    border-radius: 6px;
+}
+
+/* 基础按钮样式 */
+QPushButton {
+    background: #1976d2;
+    color: white;
+    border-radius: 6px;
+    padding: 6px 18px;
+    font-weight: bold;
+    border: none;
+}
+
+QPushButton:hover {
+    background: #1565c0;
+}
+
+/* 功能导航按钮 */
+.nav-button {
+    background: #1976d2;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    margin: 2px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.nav-button:hover {
+    background: #1565c0;
+}
+
+/* 返回按钮样式 */
+.back-button {
+    background: #f44336;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    margin: 2px;
+    border-radius: 4px;
+    font-size: 14px;
+    min-width: 120px;
+    max-width: 180px;
+    font-weight: bold;
+}
+
+.back-button:hover {
+    background: #d32f2f;
+    color: white;
+}
+
+/* 操作按钮样式 - 统一尺寸 */
+.draw-button {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    min-width: 60px;
+    max-width: 80px;
+    height: 32px;
+}
+
+.draw-button:hover {
+    background: #45a049;
+}
+
+.draw-button:pressed {
+    background: #3d8b40;
+}
+
+/* 批量操作按钮样式 */
+.batch-draw-button {
+    background: #2196f3;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    margin: 4px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: bold;
+    min-width: 100px;
+}
+
+.batch-draw-button:hover {
+    background: #1976d2;
+}
+
+.batch-draw-button:disabled {
+    background: #cccccc;
+    color: #666666;
+}
+
+.stop-batch-button {
+    background: #f44336;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    margin: 4px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: bold;
+    min-width: 100px;
+}
+
+.stop-batch-button:hover {
+    background: #d32f2f;
+}
+
+.stop-batch-button:disabled {
+    background: #cccccc;
+    color: #666666;
+}
+
+.batch-progress-label {
+    color: #1976d2;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 4px 8px;
+    background: #e3f2fd;
+    border-radius: 4px;
+    border: 1px solid #bbdefb;
+}
+
+.skip-existing-checkbox {
+    color: #424242;
+    font-size: 13px;
+    spacing: 8px;
+}
+
+.skip-existing-checkbox::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 2px solid #1976d2;
+    background: white;
+}
+
+.skip-existing-checkbox::indicator:checked {
+    background: #1976d2;
+    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHZpZXdCb3g9IjAgMCAxMiAxMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEwIDNMNC41IDguNUwyIDYiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=);
+}
+
+.voice-button {
+    background-color: #ff9800;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 12px;
+    min-width: 60px;
+    max-width: 80px;
+    height: 32px;
+}
+
+.voice-button:hover {
+    background-color: #f57c00;
+}
+
+.voice-button:pressed {
+    background-color: #ef6c00;
+}
+
+.preview-button {
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 12px;
+    min-width: 60px;
+    max-width: 80px;
+    height: 32px;
+}
+
+.preview-button:hover {
+    background-color: #45a049;
+}
+
+.preview-button:pressed {
+    background-color: #3d8b40;
+}
+
+.setting-button {
+    background: #FF9800;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    min-width: 60px;
+    max-width: 80px;
+    height: 32px;
+}
+
+.setting-button:hover {
+    background: #F57C00;
+}
+
+.setting-button:pressed {
+    background: #E65100;
+}
+
+/* 输入框、文本框 */
+QLineEdit, QPlainTextEdit, QTextEdit {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+/* 进度条样式 */
+QProgressBar {
+    border: 2px solid #1976d2;
+    border-radius: 8px;
+    text-align: center;
+    background-color: #f8f9fa;
+    height: 32px;
+    min-height: 32px;
+    font-size: 14px;
+    color: #2c3e50;
+    font-weight: bold;
+    padding: 2px;
+}
+
+QProgressBar::chunk {
+    background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: 0 #4fc3f7, stop: 1 #1976d2);
+    border-radius: 6px;
+    margin: 1px;
+}
+
+/* 进度条不确定状态样式 */
+QProgressBar:indeterminate {
+    background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: 0 #e3f2fd, stop: 0.5 #1976d2, stop: 1 #e3f2fd);
+    border-radius: 6px;
+}
+
+/* 表格样式 */
+QTableWidget {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+}
+
+QHeaderView::section {
+    background: #1976d2;
+    color: white;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 8px;
+    border: none;
+}
+
+QTableWidget::item {
+    border: none;
+    padding: 6px;
+}
+
+QTableWidget::item:selected {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+/* 图片库滚动区域 */
+.image-gallery-scroll {
+    border: 1px solid #d0d7de;
+    background-color: #f0f4f8;
+}
+
+/* 图片标签样式 */
+.image-label {
+    border: 2px solid #ccc;
+    padding: 2px;
+}
+
+.image-label-selected {
+    border: 3px solid #007ACC;
+    padding: 2px;
+    background-color: rgba(0, 122, 204, 0.1);
+}
+
+.image-label-gallery {
+    border: 2px solid #ddd;
+    margin: 5px;
+}
+
+/* 提示标签样式 */
+.prompt-label {
+    font-size: 10px;
+    color: #666;
+}
+
+.time-label {
+    font-size: 9px;
+    color: #999;
+}
+
+.title-label {
+    color: #1976d2;
+    margin: 10px 0;
+}
+
+.no-params-label {
+    color: #666;
+    font-style: italic;
+}
+
+/* 状态标签样式 */
+.status-success {
+    color: green;
+}
+
+.status-error {
+    color: red;
+}
+
+.status-info {
+    color: blue;
+}
+
+.status-warning {
+    color: orange;
+}
+
+.status-gray {
+    color: gray;
+}
+
+.status-label-success {
+    color: green;
+}
+
+.status-label-error {
+    color: red;
+}
+
+.status-label-info {
+    color: blue;
+}
+
+.status-label-default {
+    color: gray;
+}
+
+/* 工作流面板样式 */
+.workflow-panel {
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.workflow-panel QLabel {
+    font-weight: bold;
+}
+
+/* ========== Pollinations AI 设置样式 ========== */
+/* Pollinations AI 设置组样式 */
+.pollinations-group {
+    font-weight: bold;
+    font-size: 14px;
+    border: 2px solid #3498db;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    background-color: #f8f9fa;
+}
+
+.pollinations-group::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 8px 0 8px;
+    color: #2c3e50;
+    background-color: #f8f9fa;
+}
+
+/* Pollinations 标签样式 */
+.pollinations-label {
+    font-weight: bold;
+    color: #34495e;
+}
+
+/* Pollinations 下拉菜单样式 */
+.pollinations-combo {
+    padding: 6px 12px;
+    border: 2px solid #bdc3c7;
+    border-radius: 6px;
+    background-color: white;
+    min-height: 20px;
+}
+
+.pollinations-combo:focus {
+    border-color: #3498db;
+}
+
+.pollinations-combo::drop-down {
+    border: none;
+    width: 20px;
+}
+
+/* Pollinations 数值输入框样式 */
+.pollinations-spinbox {
+    padding: 6px;
+    border: 2px solid #bdc3c7;
+    border-radius: 6px;
+    background-color: white;
+    min-height: 20px;
+}
+
+.pollinations-spinbox:focus {
+    border-color: #3498db;
+}
+
+/* Pollinations 文本输入框样式 */
+.pollinations-lineedit {
+    padding: 6px 12px;
+    border: 2px solid #bdc3c7;
+    border-radius: 6px;
+    background-color: white;
+    min-height: 20px;
+}
+
+.pollinations-lineedit:focus {
+    border-color: #3498db;
+}
+
+/* Pollinations 随机种子按钮样式 */
+.pollinations-random-btn {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    min-height: 20px;
+}
+
+.pollinations-random-btn:hover {
+    background-color: #c0392b;
+}
+
+.pollinations-random-btn:pressed {
+    background-color: #a93226;
+}
+
+/* Pollinations 复选框样式 */
+.pollinations-checkbox {
+    font-weight: bold;
+    spacing: 8px;
+}
+
+.pollinations-checkbox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: 2px solid #bdc3c7;
+}
+
+.pollinations-enhance-checkbox {
+    color: #27ae60;
+}
+
+.pollinations-enhance-checkbox::indicator:checked {
+    background-color: #27ae60;
+    border-color: #27ae60;
+}
+
+.pollinations-logo-checkbox {
+    color: #8e44ad;
+}
+
+.pollinations-logo-checkbox::indicator:checked {
+    background-color: #8e44ad;
+    border-color: #8e44ad;
+}
+
+/* ========== ComfyUI 设置样式 ========== */
+/* ComfyUI 设置组样式 */
+.comfyui-group {
+    font-weight: bold;
+    font-size: 14px;
+    border: 2px solid #9b59b6;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    background-color: #faf5ff;
+}
+
+.comfyui-group::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 8px 0 8px;
+    color: #6a1b9a;
+    background-color: #faf5ff;
+}
+
+/* ComfyUI 标签样式 */
+.comfyui-label {
+    font-weight: bold;
+    color: #6a1b9a;
+}
+
+/* ComfyUI 下拉菜单样式 */
+.comfyui-combo {
+    padding: 6px 12px;
+    border: 2px solid #ce93d8;
+    border-radius: 6px;
+    background-color: white;
+    min-height: 20px;
+}
+
+.comfyui-combo:focus {
+    border-color: #9b59b6;
+}
+
+.comfyui-combo::drop-down {
+    border: none;
+    width: 20px;
+}
+
+/* ComfyUI 数值输入框样式 */
+.comfyui-spinbox {
+    padding: 6px;
+    border: 2px solid #ce93d8;
+    border-radius: 6px;
+    background-color: white;
+    min-height: 20px;
+}
+
+.comfyui-spinbox:focus {
+    border-color: #9b59b6;
+}
+
+/* ComfyUI 文本输入框样式 */
+.comfyui-lineedit {
+    padding: 6px 12px;
+    border: 2px solid #ce93d8;
+    border-radius: 6px;
+    background-color: white;
+    min-height: 20px;
+}
+
+.comfyui-lineedit:focus {
+    border-color: #9b59b6;
+}
+
+/* ComfyUI 复选框样式 */
+.comfyui-checkbox {
+    font-weight: bold;
+    color: #7b1fa2;
+    spacing: 8px;
+}
+
+.comfyui-checkbox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: 2px solid #ce93d8;
+}
+
+.comfyui-checkbox::indicator:checked {
+    background-color: #9b59b6;
+    border-color: #9b59b6;
+}
+
+/* ComfyUI 按钮样式 */
+.comfyui-button {
+    background-color: #9b59b6;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    min-height: 20px;
+}
+
+.comfyui-button:hover {
+    background-color: #8e24aa;
+}
+
+.comfyui-button:pressed {
+    background-color: #7b1fa2;
+}

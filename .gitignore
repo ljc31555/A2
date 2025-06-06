@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+PYTHONPATH
+
+# 虚拟环境
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 项目特定
+logs/
+output/
+config/projects/
+*.log
+
+# 临时文件
+*.tmp
+*.bak
+*.old
+temp/
+
+# 敏感信息 - API密钥配置文件
+config/app_settings.json
+config/llm_config.json
+config/tts_config.json
+*.key
+*.secret
+config/*_config.json
+
+# 模型文件
+*.ckpt
+*.safetensors
+*.bin
+*.pth
+*.pt
+
+# 大文件
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wav
+*.mp3
+*.flac
+
+# 系统文件
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# 其他
+.pytest_cache/
+.coverage
+.nyc_output
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

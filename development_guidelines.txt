@@ -1,0 +1,131 @@
+搭建项目结构，这样可以确保后续开发更加顺畅：
+1.项目文件结构建议
+AI_Video_Generator/ (当前实现状态)
+│── src/ #核心代码 ✅
+│ ├── gui/ #图形界面（PyQt5） ✅
+│ │   ├── main_window.py #主窗口 ✅
+│ │   ├── storyboard_tab.py #分镜编辑 ✅
+│ │   ├── ai_drawing_tab.py #绘图设置 ✅
+│ │   └── text_processing_threads.py #异步处理 ✅
+│ ├── models/ # AI模型管理 ✅
+│ │   ├── llm_api.py #LLM API封装 ✅
+│ │   ├── comfyui_client.py #ComfyUI客户端 ✅
+│ │   ├── text_parser.py #文本解析器 ✅
+│ │   └── workflow_manager.py #工作流管理 ✅
+│ ├── utils/ #工具函数 ✅
+│ │   ├── project_manager.py #项目管理 ✅
+│ │   └── logger.py #日志管理 ✅
+│ ├── video_processing/ #视频合成 🚧
+│ ├── audio_processing/ # AI配音 🚧
+│ ├── batch_processing/ #批量任务管理 🚧
+│── assets/ #静态资源 ✅
+│── config/ #配置文件 ✅
+│ ├── llm_config.json #LLM配置 ✅
+│ ├── app_settings.json #应用设置 ✅
+│ ├── tts_config.json #TTS配置 ✅
+│ ├── workflows/ #ComfyUI工作流 ✅
+│ └── projects/ #项目存储 ✅
+│── requirements.txt #依赖库 ✅
+│── main.py #程序入口 ✅
+│── README.md #说明文档 ✅
+
+这样，我们可以确保模块化开发，每个功能都可以独立开发和测试。
+2.推荐技术栈
+· 编程语言 ：Python（可扩展C++进行底层加速）
+· 界面框架 ：PyQt5或Qt for Python
+· 视频处理 ：FFmpeg + OpenCV
+· AI模型管理 ：
+o 文本转视频：通义/ Deepseek API
+o AI配音：CosyVoice API
+o 绘图设置：ComfyUI
+· GPU加速 ：CUDA / TensorRT
+· 任务管理 ：多线程&异步队列
+3.开发顺序建议
+✅ 1. 搭建基本项目结构 （如src/ 文件夹）- 已完成
+✅ 2. 实现文本转分镜处理 （通义/ Deepseek API）- 已完成
+✅ 3. 实现绘图设置模块 （ComfyUI调用与风格调整）- 已完成
+✅ 4. 优化GUI界面基础功能 （分镜表格、图片管理）- 已完成
+🚧 5. 实现AI配音模块 （含手动语速调整）- 进行中
+🚧 6. 实现视频合成模块 （FFmpeg + OpenCV）- 计划中
+🚧 7. 批量任务管理优化 （并行处理&任务队列）- 计划中
+🚧 8. GUI界面高级功能 （预览窗口、拖拽式操作）- 计划中
+🚧 9. 测试&性能优化 - 持续进行
+🚧 10. 商业化功能（收费、云端扩展）- 后期规划
+
+当前开发状态：
+- 核心功能（文本改写、分镜生成、图片生成）已稳定运行
+- 项目管理和图片保存逻辑已优化
+- 准备进入AI配音功能开发阶段
+
+最终开发规则
+1.代码规范
+· 命名规则
+o 变量名 ：使用 snake_case （如video_frame_path）
+o 类名 ：使用 PascalCase （如VideoProcessor）
+o 函数名 ：使用 snake_case （如generate_video()）
+o 常量名 ：使用 全大写+下划线 （如DEFAULT_FRAME_RATE = 30）
+· 代码格式
+o 统一使用 4个空格缩进
+o 遵循 PEP8 代码规范
+o 函数内最多 50行代码 ，超过需拆分成小模块
+o 适当添加注释，保持代码可读性
+· 文件结构
+· src/models/ 处理AI相关逻辑
+· src/gui/ 负责前端界面
+· src/video_processing/ 负责视频合成
+· src/audio_processing/ 负责语音处理
+· src/utils/ 存放公共工具函数（如格式转换）
+2.接口设计
+· 模块之间的API交互
+o 数据输入
+§ text_input：文本内容（TXT、Markdown）
+§ image_input：分镜图片（PNG、JPG）
+§ audio_input：配音文件（MP3、WAV）
+o 数据输出
+o video_output：最终视频文件（MP4、AVI）
+o metadata_output：视频信息（JSON格式）
+· JSON结构示例
+{ "scene": [ {"frame": 1, "image": "scene1.png", "text": "主角进入房间"}, {"frame": 2, "image": "scene2.png", "text": "镜头拉近，主角拿起道具"} ], "audio": "voice.mp3", "video_config": {"fps": 30, "resolution": "1920x1080"}, "output_file": "final_video.mp4" }
+3.错误处理
+· 常见异常
+o 文件不存在 ：FileNotFoundError
+o API调用失败 ：APIRequestError
+o 超时错误 ：TimeoutError
+o 视频合成失败 ：VideoProcessingError
+· 统一错误处理
+try: generate_video() except FileNotFoundError: print("错误：找不到输入文件") except Exception as e: print(f"发生未知错误：{e}")
+4.计算优化
+· GPU加速
+o 使用 CUDA/TensorRT 进行AI处理加速
+o 允许用户选择CPU或GPU模式
+· 多线程处理
+· FFmpeg合成视频时支持 多任务并行
+· 批量任务管理采用 队列模式
+5.可维护性
+· 日志管理
+o 统一存储 运行日志 （log文件）
+o 记录 API调用时间、生成任务状态
+· 代码测试
+· 每个模块至少有 单元测试
+· 确保GUI交互顺畅
+6.模块化扩展
+· 插件机制
+· 允许未来集成新功能（例如AI角色动画、3D渲染）
+· API适配层，支持不同AI方案替换，而不影响主流程
+7.用户体验优化
+· 可视化参数调节
+o 提供滑动条+图表调整效果
+o 语速调整时，实时预览 音效变化曲线
+o 分镜预览 ：让用户可以看到AI生成的 视频故事板
+· 快捷键支持
+· Ctrl+Z 撤回操作
+· Ctrl+S 保存项目
+· Space 播放/暂停预览
+8.云端扩展
+· 远程处理支持
+o 用户可以选择 本地处理 或 云计算
+o 提高复杂任务（如超分辨率）处理速度
+· 多人协作
+· 未来支持团队共享AI生成内容，提高合作效率
+· 云端API ，允许第三方集成此系统
+在后续开发过程中按照些要求进行开发。

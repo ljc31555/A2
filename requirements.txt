@@ -1,0 +1,33 @@
+# AI视频生成系统依赖包
+
+# 核心GUI框架
+PyQt5>=5.15.0
+PyQtWebEngine>=5.15.0
+
+# 图像和视频处理
+opencv-python>=4.5.0
+ffmpeg-python>=0.2.0
+Pillow>=8.0.0
+
+# 网络请求和通信
+requests>=2.25.0
+websockets>=10.0
+
+# 数据处理和科学计算
+numpy>=1.21.0
+
+# 机器学习和NLP
+transformers>=4.30.0
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+spacy>=3.7.0
+jieba>=0.42.1
+
+# 语音合成
+edge-tts>=7.0.0
+
+# 系统和工具
+# 注意：logging, typing, uuid, time, random, platform, subprocess, tempfile, csv, shutil, re, xml, asyncio 等为Python标准库，无需安装
+
+# 其他依赖如 API SDK、CosyVoice、ComfyUI 等可后续补充
