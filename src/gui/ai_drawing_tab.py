@@ -868,3 +868,11 @@ class AIDrawingTab(QWidget):
                 'enhance': False,
                 'nologo': True
             }
+    
+    def get_current_engine_name(self):
+        """获取当前选择的引擎名称"""
+        try:
+            return self.engine_combo.currentData()
+        except Exception as e:
+            logger.error(f"获取当前引擎名称失败: {e}")
+            return "pollinations"  # 默认返回pollinations

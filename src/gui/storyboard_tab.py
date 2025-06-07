@@ -1828,3 +1828,16 @@ class StoryboardTab(QWidget):
         self.generate_shots_btn.setText("生成分镜")
         self.stop_generate_btn.setEnabled(False)
         self.hide_progress()
+    
+    def get_current_settings(self):
+        """获取当前文本转镜头设置"""
+        try:
+            settings = {
+                'llm_enabled': hasattr(self, 'llm_api') and self.llm_api is not None,
+                'current_project': self.current_project_name,
+                'generation_status': self.is_generating
+            }
+            return settings
+        except Exception as e:
+            logger.error(f"获取文本转镜头设置失败: {e}")
+            return {}

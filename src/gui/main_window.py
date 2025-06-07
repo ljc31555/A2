@@ -41,6 +41,7 @@ from gui.storyboard_tab import StoryboardTab
 from gui.ai_drawing_tab import AIDrawingTab
 from gui.settings_tab import SettingsTab
 from gui.project_dialog import ProjectDialog
+from gui.character_scene_dialog import CharacterSceneDialog
 from utils.project_manager import ProjectManager
 
 APP_SETTINGS_FILENAME = "app_settings.json"
@@ -365,6 +366,9 @@ class MainWindow(QMainWindow):
         try:
             # 清空当前状态
             self.clear_current_project()
+            
+            # 设置当前项目数据
+            self.current_project_data = project_data
             
             # 加载原始文本
             if project_data.get('original_text'):
@@ -3391,19 +3395,101 @@ class MainWindow(QMainWindow):
             status_message = f"⚙️ 正在处理第{row_index + 1}行的分镜设置请求..."
             self.log_output_bottom.appendPlainText(status_message)
             
-            QMessageBox.information(self, "提示", "分镜设置功能正在开发中")
+            # 检查是否有加载的项目和角色场景管理器
+            if not hasattr(self, 'current_project_data') or not self.current_project_data:
+                QMessageBox.warning(self, "警告", "请先加载一个项目")
+                return
+            
+            character_scene_manager = self.current_project_data.get('character_scene_manager')
+            if not character_scene_manager:
+                QMessageBox.warning(self, "警告", "角色场景管理器未初始化")
+                return
+            
+            # 打开角色场景设置对话框
+            dialog = CharacterSceneDialog(character_scene_manager, self)
+            
+            # 连接信号
+            dialog.consistency_applied.connect(self.apply_consistency_to_shots)
+            
+            # 显示对话框
+            dialog.exec_()
             
             # 在状态栏显示分镜设置操作完成信息
-            completion_message = f"ℹ️ 第{row_index + 1}行分镜设置功能提示已显示（功能开发中）"
+            completion_message = f"✅ 第{row_index + 1}行分镜设置对话框已打开"
             self.log_output_bottom.appendPlainText(completion_message)
+            
         except Exception as e:
             logger.error(f"处理分镜设置按钮点击事件时发生错误: {e}")
             error_message = f"❌ 第{row_index + 1}行分镜设置处理失败: {str(e)}"
             self.log_output_bottom.appendPlainText(error_message)
             QMessageBox.critical(self, "错误", f"分镜设置处理失败: {str(e)}")
-
     
-
+    def apply_consistency_to_shots(self, selected_characters, selected_scenes):
+        """将一致性设置应用到分镜
+        
+        Args:
+            selected_characters: 选中的角色ID列表
+            selected_scenes: 选中的场景ID列表
+        """
+        try:
+            if not hasattr(self, 'current_project_data') or not self.current_project_data:
+                QMessageBox.warning(self, "警告", "没有加载的项目")
+                return
+            
+            character_scene_manager = self.current_project_data.get('character_scene_manager')
+            if not character_scene_manager:
+                QMessageBox.warning(self, "警告", "角色场景管理器未初始化")
+                return
+            
+            # 生成一致性提示词
+            consistency_prompt = character_scene_manager.generate_consistency_prompt(
+                selected_characters, selected_scenes
+            )
+            
+            if not consistency_prompt:
+                QMessageBox.information(self, "提示", "没有生成有效的一致性提示词")
+                return
+            
+            # 获取当前分镜数据
+            shots_data = self.current_project_data.get('shots_data', [])
+            if not shots_data:
+                QMessageBox.warning(self, "警告", "没有分镜数据")
+                return
+            
+            # 应用一致性提示词到所有分镜
+            updated_count = 0
+            for shot in shots_data:
+                current_prompt = shot.get('prompt', '')
+                
+                # 检查是否已经包含一致性提示词
+                if consistency_prompt not in current_prompt:
+                    # 在原有提示词前添加一致性提示词
+                    if current_prompt:
+                        shot['prompt'] = f"{consistency_prompt}; {current_prompt}"
+                    else:
+                        shot['prompt'] = consistency_prompt
+                    updated_count += 1
+            
+            # 保存更新后的项目数据
+            if updated_count > 0:
+                self.save_current_project()
+                
+                # 刷新分镜设置标签页显示
+                if hasattr(self, 'shots_settings_table') and self.shots_settings_table:
+                    self.show_shots_in_settings_tab(shots_data)
+                
+                # 显示成功消息
+                success_msg = f"成功将一致性设置应用到 {updated_count} 个分镜"
+                self.log_output_bottom.appendPlainText(f"✅ {success_msg}")
+                QMessageBox.information(self, "成功", success_msg)
+            else:
+                QMessageBox.information(self, "提示", "所有分镜已包含当前一致性设置")
+                
+        except Exception as e:
+            logger.error(f"应用一致性设置失败: {e}")
+            error_msg = f"应用一致性设置失败: {str(e)}"
+            self.log_output_bottom.appendPlainText(f"❌ {error_msg}")
+            QMessageBox.critical(self, "错误", error_msg)
 
     def closeEvent(self, event):
         logger.info("主窗口关闭事件触发")

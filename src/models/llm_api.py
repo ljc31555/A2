@@ -1,7 +1,7 @@
 import requests
 import json
 import time
-from typing import Dict, Union
+from typing import Dict, Union, List
 import logging
 import jieba
 
@@ -37,10 +37,10 @@ class LLMApi:
         except Exception as e:
             logger.error(f"Jieba分词模型初始化失败: {e}")
         
-        # 文本分段配置
-        self.max_text_length = 5000  # 单次处理的最大文本长度（提高阈值确保完整文章能整体处理）
-        self.overlap_length = 200    # 分段重叠长度，保证上下文连贯性
-        self.summary_threshold = 8000  # 只有超过此长度才生成摘要（优化：减少不必要的摘要生成）
+        # 文本分段配置 - 优化参数以平衡分镜密度和处理效率
+        self.max_text_length = 800   # 单次处理的最大文本长度，适中的分段大小
+        self.overlap_length = 150    # 分段重叠长度，保证上下文连贯性
+        self.summary_threshold = 3000  # 摘要阈值，超过此长度才生成摘要
     
     def is_configured(self) -> bool:
         """检查LLM API是否已正确配置"""
@@ -49,6 +49,7 @@ class LLMApi:
     def _split_text_intelligently(self, text: str) -> list:
         """
         智能分段文本，优先按段落、句子分割，避免截断句子
+        增加重叠度处理，确保上下文连贯性
         返回分段后的文本列表
         """
         if len(text) <= self.max_text_length:
@@ -71,16 +72,16 @@ class LLMApi:
             
             # 优先级1: 寻找段落分隔符（双换行）
             paragraph_split = segment_text.rfind('\n\n')
-            if paragraph_split > self.max_text_length * 0.5:  # 确保分段不会太短
+            if paragraph_split > self.max_text_length * 0.2:  # 大幅降低最小分段比例
                 split_pos = current_pos + paragraph_split + 2
                 segments.append(text[current_pos:split_pos])
-                current_pos = split_pos
+                current_pos = max(current_pos + 1, split_pos - self.overlap_length)
                 continue
                 
             # 优先级2: 寻找句子结束符
             sentence_endings = ['。', '！', '？', '.', '!', '?']
             best_split = -1
-            for i in range(len(segment_text) - 1, int(len(segment_text) * 0.5), -1):
+            for i in range(len(segment_text) - 1, int(len(segment_text) * 0.2), -1):  # 大幅降低最小比例
                 if segment_text[i] in sentence_endings:
                     best_split = i + 1
                     break
@@ -88,29 +89,180 @@ class LLMApi:
             if best_split > 0:
                 split_pos = current_pos + best_split
                 segments.append(text[current_pos:split_pos])
-                current_pos = split_pos
+                current_pos = max(current_pos + 1, split_pos - self.overlap_length)
+                continue
+                 
+            # 优先级3: 寻找标点符号
+            punctuation = ['，', '；', '：', ',', ';', ':']
+            best_split = -1
+            for i in range(len(segment_text) - 1, int(len(segment_text) * 0.2), -1):  # 大幅降低最小比例
+                if segment_text[i] in punctuation:
+                    best_split = i + 1
+                    break
+                    
+            if best_split > 0:
+                split_pos = current_pos + best_split
+                segments.append(text[current_pos:split_pos])
+                current_pos = max(current_pos + 1, split_pos - self.overlap_length)
+                continue
+                 
+            # 优先级4: 寻找空格
+            space_split = segment_text.rfind(' ')
+            if space_split > self.max_text_length * 0.2:  # 大幅降低最小比例
+                split_pos = current_pos + space_split + 1
+                segments.append(text[current_pos:split_pos])
+                current_pos = max(current_pos + 1, split_pos - self.overlap_length)
                 continue
                 
-            # 优先级3: 寻找标点符号
-            punctuations = ['，', '；', '：', ',', ';', ':']
-            for i in range(len(segment_text) - 1, int(len(segment_text) * 0.7), -1):
-                if segment_text[i] in punctuations:
-                    split_pos = current_pos + i + 1
-                    segments.append(text[current_pos:split_pos])
-                    current_pos = split_pos
-                    break
+            # 最后选择：强制分割
+            segments.append(text[current_pos:end_pos])
+            current_pos = max(current_pos + 1, end_pos - self.overlap_length)
+        
+        return segments
+    
+    def _rewrite_text_with_segments(self, text: str, progress_callback=None) -> str:
+        """
+        分段改写文本
+        """
+        logger.info("[文本改写] 开始分段改写文本")
+        segments = self._smart_split_text(text)
+        logger.info(f"[文本改写] 文本分为 {len(segments)} 段进行改写")
+        
+        rewritten_segments = []
+        for i, segment in enumerate(segments):
+            if progress_callback:
+                progress_callback(f"正在改写第 {i+1}/{len(segments)} 段")
+            
+            rewritten_segment = self._rewrite_single_text(segment)
+            rewritten_segments.append(rewritten_segment)
+            
+        result = '\n\n'.join(rewritten_segments)
+        logger.info(f"[文本改写] 分段改写完成，改写后文本长度: {len(result)}")
+        return result
+    
+    def _rewrite_single_text(self, text: str) -> str:
+        """
+        改写单段文本
+        """
+        system_prompt = """
+你是一个专业的文本改写助手。请按照以下要求改写文本：
+
+1. 保留原文的核心思想和主要信息
+2. 改写后的文本长度应与原文基本一致
+3. 使用更加生动、具体的表达方式
+4. 保持文本的逻辑结构和段落划分
+5. 确保改写后的文本流畅自然
+6. 只输出改写后的文本内容，不要添加任何解释或说明
+"""
+        
+        user_prompt = f"请改写以下文本：\n\n{text}"
+        
+        try:
+            response = self._make_api_call(system_prompt, user_prompt)
+            
+            # 处理返回结果
+            if isinstance(response, str):
+                return response.strip()
+            elif isinstance(response, dict) and 'content' in response:
+                return response['content'].strip()
             else:
-                # 优先级4: 寻找空格
-                space_pos = segment_text.rfind(' ')
-                if space_pos > len(segment_text) * 0.7:
-                    split_pos = current_pos + space_pos + 1
-                    segments.append(text[current_pos:split_pos])
-                    current_pos = split_pos
-                else:
-                    # 最后选择：强制分割
-                    segments.append(segment_text)
-                    current_pos = end_pos
+                logger.error(f"改写文本时收到意外的响应格式: {type(response)}")
+                return text  # 返回原文本作为备选
+                
+        except Exception as e:
+            logger.error(f"改写文本时发生错误: {str(e)}")
+            return text  # 返回原文本作为备选
+    
+    def generate_shots(self, text: str, progress_callback=None) -> List[Dict]:
+        """
+        生成分镜脚本
+        """
+        logger.info(f"[分镜生成] 开始处理，原文本长度: {len(text)}")
+        
+        # 检查文本长度，决定处理策略
+        if len(text) > self.max_text_length:
+            logger.info(f"[分镜生成] 文本长度 {len(text)} 超过限制 {self.max_text_length}，启用分段生成分镜")
+            if progress_callback:
+                progress_callback(f"文本过长({len(text)}字符)，启用智能分段生成分镜")
+            return self._generate_shots_with_segments(text, progress_callback)
+        
+        # 正常处理流程
+        if progress_callback:
+            progress_callback("文本长度适中，使用标准分镜生成流程")
+        return self._generate_single_shots(text)
+    
+    def _smart_split_text(self, text: str) -> list:
+        """
+        智能分段文本，优先按段落、句子分割，避免截断句子
+        增加重叠度处理，确保上下文连贯性
+        返回分段后的文本列表
+        """
+        if len(text) <= self.max_text_length:
+            return [text]
+            
+        segments = []
+        current_pos = 0
+        
+        while current_pos < len(text):
+            # 计算当前段的结束位置
+            end_pos = min(current_pos + self.max_text_length, len(text))
+            
+            if end_pos == len(text):
+                # 最后一段，直接添加
+                segments.append(text[current_pos:end_pos])
+                break
+            
+            # 寻找合适的分割点
+            segment_text = text[current_pos:end_pos]
+            
+            # 优先级1: 寻找段落分隔符（双换行）
+            paragraph_split = segment_text.rfind('\n\n')
+            if paragraph_split > self.max_text_length * 0.2:  # 大幅降低最小分段比例
+                split_pos = current_pos + paragraph_split + 2
+                segments.append(text[current_pos:split_pos])
+                current_pos = max(current_pos + 1, split_pos - self.overlap_length)
+                continue
+                
+            # 优先级2: 寻找句子结束符
+            sentence_endings = ['。', '！', '？', '.', '!', '?']
+            best_split = -1
+            for i in range(len(segment_text) - 1, int(len(segment_text) * 0.2), -1):  # 大幅降低最小比例
+                if segment_text[i] in sentence_endings:
+                    best_split = i + 1
+                    break
                     
+            if best_split > 0:
+                split_pos = current_pos + best_split
+                segments.append(text[current_pos:split_pos])
+                current_pos = max(current_pos + 1, split_pos - self.overlap_length)
+                continue
+                 
+            # 优先级3: 寻找标点符号
+            punctuation = ['，', '；', '：', ',', ';', ':']
+            best_split = -1
+            for i in range(len(segment_text) - 1, int(len(segment_text) * 0.2), -1):  # 大幅降低最小比例
+                if segment_text[i] in punctuation:
+                    best_split = i + 1
+                    break
+                    
+            if best_split > 0:
+                split_pos = current_pos + best_split
+                segments.append(text[current_pos:split_pos])
+                current_pos = max(current_pos + 1, split_pos - self.overlap_length)
+                continue
+                 
+            # 优先级4: 寻找空格
+            space_split = segment_text.rfind(' ')
+            if space_split > self.max_text_length * 0.2:  # 大幅降低最小比例
+                split_pos = current_pos + space_split + 1
+                segments.append(text[current_pos:split_pos])
+                current_pos = max(current_pos + 1, split_pos - self.overlap_length)
+                continue
+                
+            # 最后选择：强制分割
+            segments.append(text[current_pos:end_pos])
+            current_pos = max(current_pos + 1, end_pos - self.overlap_length)
+        
         return segments
 
     def _merge_rewritten_segments(self, segments: list) -> str:
@@ -416,12 +568,14 @@ class LLMApi:
             "\n"
             "**重要要求：请为文本内容生成尽可能多的分镜场景。每个重要的情节、对话、动作、情感变化都应该有对应的分镜。不要将多个场景合并到一个分镜中，而是要详细拆分。**\n"
             "\n"
-            "**分镜数量指导原则：**\n"
-            "- 每100-150字的文本内容应该生成3-5个分镜场景\n"
-            "- 每个对话回合应该有独立的分镜\n"
-            "- 每个动作或情感变化应该有独立的分镜\n"
+            "**分镜数量指导原则（必须严格遵守）：**\n"
+            "- 每60-80字的文本内容应该生成至少1个分镜场景\n"
+            "- 每个对话回合必须有独立的分镜\n"
+            "- 每个动作或情感变化必须有独立的分镜\n"
             "- 场景转换必须有独立的分镜\n"
+            "- 每个重要的描述性段落都要有对应的分镜\n"
             "- 对于长文本，确保从开头到结尾的每一段内容都有对应的分镜\n"
+            "- 宁可分镜过多，也不能遗漏任何内容\n"
             "\n"
             "**内容完整性要求（必须严格遵守）：**\n"
             "- 必须覆盖用户提供文本的所有内容，从第一段到最后一段，不得遗漏任何段落或情节\n"
@@ -469,14 +623,16 @@ class LLMApi:
         # 如果没有传入风格，使用默认的电影风格
         if style is None:
             style = '电影风格'
-        print(f"开始分段生成分镜，原文本长度: {len(text)}")
+        print(f"[分镜生成] 开始分段生成分镜，原文本长度: {len(text)}")
+        logger.info(f"[分镜生成] 开始分段生成分镜，原文本长度: {len(text)}")
         
         # 智能分段
-        segments = self._split_text_intelligently(text)
-        print(f"文本已分为 {len(segments)} 段")
+        segments = self._smart_split_text(text)
+        print(f"[分镜生成] 文本已分为 {len(segments)} 段，准备生成分镜")
+        logger.info(f"[分镜生成] 文本已分为 {len(segments)} 段，准备生成分镜")
         
         if progress_callback:
-            progress_callback(f"文本已分为 {len(segments)} 段，正在生成摘要...")
+            progress_callback(f"文本已分为 {len(segments)} 段，正在生成分镜摘要...")
         
         # 优化：只有文本长度超过阈值时才生成摘要，减少不必要的API调用
         summary_text = ""
@@ -493,63 +649,70 @@ class LLMApi:
             ]
             
             summary_result = self._make_api_call(self.shots_model_name, summary_messages, "generate_shots_summary")
-            print(f"生成文本摘要完成，长度: {len(summary_result) if isinstance(summary_result, str) else 0}")
+            print(f"[分镜生成] 分镜摘要生成完成，长度: {len(summary_result) if isinstance(summary_result, str) else 0}")
+            logger.info(f"[分镜生成] 分镜摘要生成完成，长度: {len(summary_result) if isinstance(summary_result, str) else 0}")
             
             if not isinstance(summary_result, str) or summary_result.startswith("API错误"):
-                print("生成摘要失败，将直接处理分段")
+                print("[分镜生成] 分镜摘要生成失败，将直接处理分段")
+                logger.warning("[分镜生成] 分镜摘要生成失败，将直接处理分段")
                 summary_text = ""  # 摘要生成失败，使用空字符串
                 if progress_callback:
-                    progress_callback("摘要生成失败，开始逐段处理...")
+                    progress_callback("分镜摘要生成失败，开始逐段生成分镜...")
             else:
                 summary_text = f"文本整体摘要：\n{summary_result}\n\n"
                 if progress_callback:
-                    progress_callback("摘要生成完成，开始逐段处理...")
+                    progress_callback("分镜摘要生成完成，开始逐段生成分镜...")
         else:
-            print(f"文本长度 {len(text)} 未超过摘要阈值 {self.summary_threshold}，跳过摘要生成")
+            print(f"[分镜生成] 文本长度 {len(text)} 未超过摘要阈值 {self.summary_threshold}，跳过摘要生成")
+            logger.info(f"[分镜生成] 文本长度 {len(text)} 未超过摘要阈值 {self.summary_threshold}，跳过摘要生成")
             if progress_callback:
-                progress_callback("文本长度适中，跳过摘要生成，开始逐段处理...")
+                progress_callback("文本长度适中，跳过摘要生成，开始逐段生成分镜...")
         
         # 处理每个分段，生成分镜
         all_shots_results = []
         
         for i, segment in enumerate(segments):
-            print(f"正在为第 {i+1}/{len(segments)} 段生成分镜，长度: {len(segment)}")
+            print(f"[分镜生成] 正在为第 {i+1}/{len(segments)} 段生成分镜，段落长度: {len(segment)}")
+            logger.info(f"[分镜生成] 正在为第 {i+1}/{len(segments)} 段生成分镜，段落长度: {len(segment)}")
             
             if progress_callback:
-                progress_callback(f"正在处理第 {i+1}/{len(segments)} 段文本...")
+                progress_callback(f"正在为第 {i+1}/{len(segments)} 段生成分镜...")
             
-            # 为分段添加上下文提示
-            expected_min_shots = max(3, len(segment) // 150)
-            expected_max_shots = max(5, len(segment) // 100)
-            context_prompt = f"{summary_text}这是一篇长文本的第{i+1}部分（共{len(segments)}部分）。\n\n重要提醒：\n1. 请为这部分内容生成详细的分镜，每个重要情节、对话、动作都应该有对应的分镜\n2. 这部分内容预计应该生成 {expected_min_shots} 到 {expected_max_shots} 个分镜\n3. 请确保不遗漏任何重要内容\n4. 文案列必须直接引用原文内容"
+            # 为分段添加上下文提示 - 大幅增加分镜密度
+            expected_min_shots = max(8, len(segment) // 50)  # 大幅增加最小分镜数量
+            expected_max_shots = max(15, len(segment) // 30)  # 大幅增加最大分镜数量
+            context_prompt = f"{summary_text}这是一篇长文本的第{i+1}部分（共{len(segments)}部分）。\n\n【超严格要求 - 必须严格执行】：\n1. 【文本覆盖】必须100%覆盖这部分的所有文本内容，从第一个字到最后一个字，绝对不能有任何遗漏或跳过\n2. 【分镜密度】这部分内容必须生成 {expected_min_shots} 到 {expected_max_shots} 个分镜，平均每30-50字生成1个分镜\n3. 【逐句处理】每个句子、每个对话、每个动作、每个描述都要有独立的分镜，不能合并\n4. 【原文引用】文案列必须逐字逐句引用原文，保持100%的原文完整性，禁止概括、省略或改写\n5. 【细节展现】对于重要场景、情感变化、动作描述、对话内容，必须生成多个分镜详细展现\n6. 【独立处理】严禁因为内容相似就合并分镜，每个独立的句子、对话、动作都要单独生成分镜\n7. 【质量检查】生成完成后必须自检：是否覆盖了这部分文本的每一个字？是否达到了要求的分镜数量？\n8. 【宁多勿少】如果不确定，宁可生成更多分镜也不能遗漏任何内容"
             
             # 生成当前段落的分镜
             segment_shots = self._generate_single_shots(f"{context_prompt}\n\n{segment}", style)
             
             # 检查是否生成成功
             if segment_shots.startswith("API错误"):
-                print(f"第 {i+1} 段分镜生成失败: {segment_shots[:100]}...")
+                print(f"[分镜生成] 第 {i+1} 段分镜生成失败: {segment_shots[:100]}...")
+                logger.error(f"[分镜生成] 第 {i+1} 段分镜生成失败: {segment_shots[:100]}...")
                 if progress_callback:
-                    progress_callback(f"第 {i+1} 段处理失败，终止操作")
+                    progress_callback(f"第 {i+1} 段分镜生成失败，终止操作")
                 return f"分段分镜生成失败：第 {i+1} 段处理时出错 - {segment_shots}"
             
             all_shots_results.append(segment_shots)
-            print(f"第 {i+1} 段分镜生成完成，结果长度: {len(segment_shots)}")
+            print(f"[分镜生成] 第 {i+1} 段分镜生成完成，结果长度: {len(segment_shots)}")
+            logger.info(f"[分镜生成] 第 {i+1} 段分镜生成完成，结果长度: {len(segment_shots)}")
             
             if progress_callback:
-                progress_callback(f"第 {i+1}/{len(segments)} 段处理完成 ({int((i+1)/len(segments)*100)}%)")
+                progress_callback(f"第 {i+1}/{len(segments)} 段分镜生成完成 ({int((i+1)/len(segments)*100)}%)")
 
         
         # 合并所有分镜结果
         # 对于分镜表格，我们需要特殊处理合并逻辑
         if progress_callback:
-            progress_callback("正在合并所有分段结果...")
+            progress_callback("正在合并所有分镜结果...")
             
         final_result = self._merge_shots_results(all_shots_results)
-        print(f"分段分镜生成完成，最终结果长度: {len(final_result)}")
+        print(f"[分镜生成] 分段分镜生成完成，最终结果长度: {len(final_result)}")
+        logger.info(f"[分镜生成] 分段分镜生成完成，最终结果长度: {len(final_result)}")
         
         if progress_callback:
-            progress_callback("分段处理完成，已合并所有结果")
+            progress_callback("分镜生成完成，已合并所有结果")
             
         return final_result
     
@@ -618,18 +781,20 @@ class LLMApi:
 
 
     def rewrite_text(self, text: str, progress_callback=None) -> str:
-        print("DEBUG (llm_api.py): 进入 LLMApi.rewrite_text (版本号: 20250526_1900_FIXED_VARNAME)")
+        print("开始文本改写处理")
+        logger.info(f"[文本改写] 开始处理，原文本长度: {len(text)}")
         
         # 检查文本长度，决定是否需要分段处理
         if len(text) > self.max_text_length:
-            print(f"文本长度 {len(text)} 超过限制 {self.max_text_length}，启用分段处理")
+            print(f"[文本改写] 文本长度 {len(text)} 超过限制 {self.max_text_length}，启用分段改写")
+            logger.info(f"[文本改写] 文本长度 {len(text)} 超过限制 {self.max_text_length}，启用分段改写")
             if progress_callback:
-                progress_callback(f"文本过长({len(text)}字符)，启用智能分段处理")
+                progress_callback(f"文本过长({len(text)}字符)，启用智能分段改写")
             return self._rewrite_text_with_segments(text, progress_callback)
         
         # 正常处理流程
         if progress_callback:
-            progress_callback("文本长度适中，使用标准处理流程")
+            progress_callback("文本长度适中，使用标准改写流程")
         return self._rewrite_single_text(text)
     
     def _rewrite_single_text(self, text: str) -> str:
@@ -694,7 +859,7 @@ class LLMApi:
         print(f"开始分段改写，原文本长度: {len(text)}")
         
         # 智能分段
-        segments = self._split_text_intelligently(text)
+        segments = self._smart_split_text(text)
         print(f"文本已分为 {len(segments)} 段")
         
         if progress_callback:

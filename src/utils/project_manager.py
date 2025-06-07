@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from utils.logger import logger
+from utils.character_scene_manager import CharacterSceneManager
 
 class ProjectManager:
     """项目状态管理器 - 负责保存和恢复项目工作状态"""
@@ -36,7 +37,8 @@ class ProjectManager:
             'audio',      # 配音文件
             'subtitles',  # 字幕文件
             'videos',     # 视频文件
-            'temp'        # 临时文件
+            'temp',       # 临时文件
+            'character_scene_db'  # 角色场景数据库
         ]
         
         for subdir in subdirs:
@@ -289,6 +291,9 @@ class ProjectManager:
                             absolute_path = os.path.join(project_root, relative_path)
                             image_info['path'] = absolute_path
             
+            # 初始化角色场景管理器
+            character_scene_manager = CharacterSceneManager(project_root)
+            
             # 组合完整的项目数据
             project_data = {
                 'project_name': config_data.get('project_name', project_name),
@@ -302,7 +307,8 @@ class ProjectManager:
                 'original_text': original_text,
                 'rewritten_text': rewritten_text,
                 'shots_data': shots_data,
-                'project_root': project_root
+                'project_root': project_root,
+                'character_scene_manager': character_scene_manager
             }
             
             logger.info(f"项目已加载: {project_name} <- {project_root}")

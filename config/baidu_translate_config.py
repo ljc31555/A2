@@ -11,7 +11,7 @@ BAIDU_TRANSLATE_CONFIG = {
     'app_id': '20240529002064529',
     
     # 请将下面的占位符替换为您的实际密钥
-    'secret_key': 'YOUfpPftxwOvbIGAWwmkucK',
+    'secret_key': 'fpPftxwOvbIGAWwmkucK',
     
     # API URL（通常不需要修改）
     'api_url': 'https://fanyi-api.baidu.com/api/trans/vip/translate'
