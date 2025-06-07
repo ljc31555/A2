@@ -259,24 +259,24 @@ class StoryboardTab(QWidget):
                 QMessageBox.warning(self, "警告", "请先在设置中配置大模型")
                 return
             
-            # 初始化LLM API（每次都根据当前选择的模型重新创建）
-            all_model_configs = self.config_manager.config.get("models", [])
-            model_config = None
-            for cfg in all_model_configs:
-                if cfg.get("name") == selected_model:
-                    model_config = cfg
-                    break
-            
-            if model_config:
-                self.llm_api = LLMApi(
-                    api_type=model_config.get('type', 'deepseek'),
-                    api_key=model_config.get('key', ''),
-                    api_url=model_config.get('url', '')
-                )
-                logger.info(f"使用模型: {selected_model}, 类型: {model_config.get('type')}, URL: {model_config.get('url')}")
-            else:
-                QMessageBox.warning(self, "错误", "模型配置不完整")
-                return
+            # 初始化LLM API
+            if not self.llm_api:
+                all_model_configs = self.config_manager.config.get("models", [])
+                model_config = None
+                for cfg in all_model_configs:
+                    if cfg.get("name") == selected_model:
+                        model_config = cfg
+                        break
+                
+                if model_config:
+                    self.llm_api = LLMApi(
+                        api_type=model_config.get('type', 'deepseek'),
+                        api_key=model_config.get('key', ''),
+                        api_url=model_config.get('url', '')
+                    )
+                else:
+                    QMessageBox.warning(self, "错误", "模型配置不完整")
+                    return
             
             # 获取选择的风格
             selected_style = self.style_combo.currentText()
@@ -318,26 +318,26 @@ class StoryboardTab(QWidget):
             self.is_generating = True
             self.stop_generation = False
             
-            # 初始化LLM API（每次都根据当前选择的模型重新创建）
-            selected_model = self.model_combo.currentText()
-            all_model_configs = self.config_manager.config.get("models", [])
-            model_config = None
-            for cfg in all_model_configs:
-                if cfg.get("name") == selected_model:
-                    model_config = cfg
-                    break
-            
-            if model_config:
-                self.llm_api = LLMApi(
-                    api_type=model_config.get('type', 'deepseek'),
-                    api_key=model_config.get('key', ''),
-                    api_url=model_config.get('url', '')
-                )
-                logger.info(f"使用模型: {selected_model}, 类型: {model_config.get('type')}, URL: {model_config.get('url')}")
-            else:
-                QMessageBox.warning(self, "错误", "模型配置不完整")
-                self.is_generating = False
-                return
+            # 初始化LLM API（如果还没有初始化）
+            if not self.llm_api:
+                selected_model = self.model_combo.currentText()
+                all_model_configs = self.config_manager.config.get("models", [])
+                model_config = None
+                for cfg in all_model_configs:
+                    if cfg.get("name") == selected_model:
+                        model_config = cfg
+                        break
+                
+                if model_config:
+                    self.llm_api = LLMApi(
+                        api_type=model_config.get('type', 'deepseek'),
+                        api_key=model_config.get('key', ''),
+                        api_url=model_config.get('url', '')
+                    )
+                else:
+                    QMessageBox.warning(self, "错误", "模型配置不完整")
+                    self.is_generating = False
+                    return
             
             # 初始化文本解析器
             if not self.text_parser:

@@ -123,16 +123,18 @@ class AIDrawingTab(QWidget):
         # 种子设置
         seed_layout = QHBoxLayout()
         seed_layout.addWidget(QLabel("种子:"))
-        self.pollinations_seed_edit = QLineEdit()
-        self.pollinations_seed_edit.setPlaceholderText("-1则随机生成")
-        seed_layout.addWidget(self.pollinations_seed_edit)
         
-        # 添加随机种子按钮
-        pollinations_random_seed_btn = QPushButton("随机")
-        pollinations_random_seed_btn.setMaximumWidth(60)
-        pollinations_random_seed_btn.setProperty("class", "pollinations-random-btn")
-        pollinations_random_seed_btn.clicked.connect(self.generate_pollinations_random_seed)
-        seed_layout.addWidget(pollinations_random_seed_btn)
+        # 种子类型下拉菜单
+        self.pollinations_seed_type_combo = QComboBox()
+        self.pollinations_seed_type_combo.addItems(["随机", "固定"])
+        self.pollinations_seed_type_combo.currentTextChanged.connect(self.on_pollinations_seed_type_changed)
+        seed_layout.addWidget(self.pollinations_seed_type_combo)
+        
+        # 种子值输入框
+        self.pollinations_seed_edit = QLineEdit()
+        self.pollinations_seed_edit.setPlaceholderText("自动生成随机值")
+        self.pollinations_seed_edit.setEnabled(False)  # 默认禁用
+        seed_layout.addWidget(self.pollinations_seed_edit)
         
         pollinations_group_layout.addLayout(seed_layout)
         
@@ -804,33 +806,55 @@ class AIDrawingTab(QWidget):
         self.generate_image_btn.setEnabled(True)
         self.generate_image_btn.setText("生成图片")
     
+    def on_pollinations_seed_type_changed(self, seed_type):
+        """处理Pollinations种子类型改变"""
+        try:
+            if seed_type == "随机":
+                # 随机模式：禁用输入框，生成随机值
+                self.pollinations_seed_edit.setEnabled(False)
+                self.pollinations_seed_edit.setPlaceholderText("自动生成随机值")
+                # 生成随机种子值并显示
+                import random
+                random_seed = random.randint(0, 2147483647)
+                self.pollinations_seed_edit.setText(str(random_seed))
+            else:
+                # 固定模式：启用输入框
+                self.pollinations_seed_edit.setEnabled(True)
+                self.pollinations_seed_edit.setPlaceholderText("输入固定种子值")
+                if not self.pollinations_seed_edit.text() or self.pollinations_seed_edit.text().isdigit():
+                    self.pollinations_seed_edit.setText("42")  # 默认固定值
+        except Exception as e:
+            logger.error(f"处理种子类型改变失败: {e}")
+    
     def get_current_pollinations_settings(self):
         """获取当前Pollinations AI设置"""
         try:
-            # 获取种子值
-            seed_text = self.pollinations_seed_edit.text().strip()
-            seed = None
-            if seed_text:
-                if seed_text == "-1":
-                    seed = "random"  # Pollinations AI使用"random"表示随机种子
-                else:
-                    try:
-                        seed = int(seed_text)
-                    except ValueError:
-                        seed = "random"  # 如果输入无效，使用随机种子
-            else:
-                seed = "random"  # 空输入默认使用随机种子
-            
             settings = {
                 'model': self.pollinations_model_combo.currentText(),
                 'width': self.pollinations_width_spin.value(),
                 'height': self.pollinations_height_spin.value(),
-                'seed': seed,
                 'enhance': self.pollinations_enhance_check.isChecked(),
-                'nologo': not self.pollinations_logo_check.isChecked()  # nologo与添加Logo水印相反
+                'nologo': not self.pollinations_logo_check.isChecked(),
             }
             
-            logger.info(f"获取Pollinations设置: {settings}")
+            # 处理种子值
+            seed_type = self.pollinations_seed_type_combo.currentText()
+            if seed_type == "随机":
+                # 随机模式：每次生成新的随机值
+                import random
+                settings['seed'] = random.randint(0, 2147483647)
+            else:
+                # 固定模式：使用输入框的值
+                try:
+                    seed_value = self.pollinations_seed_edit.text().strip()
+                    if seed_value and seed_value.isdigit():
+                        settings['seed'] = int(seed_value)
+                    else:
+                        settings['seed'] = 42  # 默认固定值
+                except (ValueError, AttributeError):
+                    settings['seed'] = 42
+            
+            logger.debug(f"Pollinations设置: {settings}")
             return settings
             
         except Exception as e:
@@ -840,20 +864,7 @@ class AIDrawingTab(QWidget):
                 'model': 'flux',
                 'width': 1024,
                 'height': 1024,
-                'seed': 'random',
+                'seed': 42,
                 'enhance': False,
                 'nologo': True
             }
-    
-    def generate_pollinations_random_seed(self):
-        """生成Pollinations AI随机种子值"""
-        try:
-            import random
-            # 生成一个随机种子值（0到2147483647之间）
-            random_seed = random.randint(0, 2147483647)
-            self.pollinations_seed_edit.setText(str(random_seed))
-            logger.info(f"生成Pollinations随机种子: {random_seed}")
-        except Exception as e:
-            logger.error(f"生成Pollinations随机种子失败: {e}")
-            # 如果生成失败，设置为-1（随机）
-            self.pollinations_seed_edit.setText("-1")

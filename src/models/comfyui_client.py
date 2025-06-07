@@ -8,6 +8,7 @@ import uuid
 from utils.logger import logger
 from models.llm_api import LLMApi
 from models.workflow_manager import WorkflowManager
+from utils.baidu_translator import translate_text, is_configured as is_baidu_configured
 import json
 import time
 import random
@@ -512,17 +513,35 @@ class ComfyUIClient:
     def _translate_prompt(self, chinese_prompt: str) -> str:
         """
         将中文提示词翻译为英文
-        如果没有配置LLM API或翻译失败，返回原始提示词
+        优先使用百度翻译，如果未配置或失败则使用LLM翻译，最后返回原始提示词
         """
         logger.debug(f"开始翻译提示词，原始长度: {len(chinese_prompt)}")
         logger.debug(f"原始提示词: {chinese_prompt}")
         
+        # 优先使用百度翻译
+        if is_baidu_configured():
+            try:
+                logger.debug("使用百度翻译API进行翻译")
+                translated_result = translate_text(chinese_prompt, 'zh', 'en')
+                
+                if translated_result and translated_result.strip():
+                    logger.info(f"百度翻译成功: {chinese_prompt[:50]}... -> {translated_result[:50]}...")
+                    logger.debug(f"翻译后完整提示词: {translated_result}")
+                    return translated_result
+                else:
+                    logger.warning("百度翻译返回空结果，尝试使用LLM翻译")
+            except Exception as e:
+                logger.error(f"百度翻译失败: {e}，尝试使用LLM翻译")
+        else:
+            logger.debug("百度翻译未配置，尝试使用LLM翻译")
+        
+        # 如果百度翻译失败或未配置，尝试使用LLM翻译
         if not self.llm_api:
             logger.warning("未配置LLM API，无法翻译提示词，使用原始中文提示词")
             return chinese_prompt
             
         try:
-            logger.debug("构建翻译提示")
+            logger.debug("构建LLM翻译提示")
             # 构建翻译提示
             translation_prompt = f"""
 请将以下中文图像生成提示词翻译成英文，保持原意和细节描述：
@@ -555,16 +574,16 @@ class ComfyUIClient:
             if isinstance(translated_result, str) and translated_result.strip():
                 # 清理翻译结果，移除可能的引号和多余空白
                 translated_prompt = translated_result.strip().strip('"').strip("'")
-                logger.info(f"提示词翻译成功: {chinese_prompt[:50]}... -> {translated_prompt[:50]}...")
+                logger.info(f"LLM翻译成功: {chinese_prompt[:50]}... -> {translated_prompt[:50]}...")
                 logger.debug(f"翻译后完整提示词: {translated_prompt}")
                 return translated_prompt
             else:
-                logger.warning(f"翻译失败，LLM返回无效结果: {translated_result}")
+                logger.warning(f"LLM翻译失败，返回无效结果: {translated_result}")
                 logger.warning("使用原始中文提示词")
                 return chinese_prompt
                 
         except Exception as e:
-            logger.error(f"翻译提示词时发生错误: {e}")
+            logger.error(f"LLM翻译提示词时发生错误: {e}")
             logger.error(f"错误类型: {type(e).__name__}")
             logger.error(f"错误详情: {str(e)}")
             import traceback
