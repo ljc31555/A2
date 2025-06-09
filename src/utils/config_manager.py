@@ -2,10 +2,14 @@ import json
 import os
 
 class ConfigManager:
-    def __init__(self, config_dir='f:\\AI\\AI_Video_Generator\\config'):
+    def __init__(self, config_dir='f:\\AI2\\AI_Video_Generator\\config'):
         self.config_dir = config_dir
         self.config_file = os.path.join(self.config_dir, 'llm_config.json')
+        self.config_json_dir = os.path.join(self.config_dir, 'config.json')
         self.config = self._load_config()
+        self.image_config = self._load_image_config()
+        self.voice_config = self._load_voice_config()
+        self.app_config = self._load_app_config()
 
     def _load_config(self):
         all_models = []
@@ -69,6 +73,39 @@ class ConfigManager:
                      print(f"Error reading default config {default_config_path}: {e}")
 
         return {"models": all_models}
+    
+    def _load_image_config(self):
+        """加载图像生成配置"""
+        image_config_path = os.path.join(self.config_json_dir, 'image_config.json')
+        if os.path.exists(image_config_path):
+            try:
+                with open(image_config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading image config: {e}")
+        return {"image_generation": {"default_engine": "pollinations", "pollinations": {"enabled": True}}}
+    
+    def _load_voice_config(self):
+        """加载语音配置"""
+        voice_config_path = os.path.join(self.config_json_dir, 'voice_config.json')
+        if os.path.exists(voice_config_path):
+            try:
+                with open(voice_config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading voice config: {e}")
+        return {"voice_generation": {"default_engine": "edge", "engines": {"edge_tts": {"enabled": True}}}}
+    
+    def _load_app_config(self):
+        """加载应用配置"""
+        app_config_path = os.path.join(self.config_json_dir, 'app_config.json')
+        if os.path.exists(app_config_path):
+            try:
+                with open(app_config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading app config: {e}")
+        return {"app_settings": {"version": "2.0.0", "debug_mode": False}}
 
     def get_model_config(self, model_name):
         # This method remains the same, as it iterates through the 'models' list
@@ -138,7 +175,49 @@ class ConfigManager:
         return self.save_app_settings(config_data)
 
     def get_models(self):
-        return self.config
+        return self.config.get("models", [])
+    
+    def get_image_config(self):
+        """获取图像生成配置"""
+        return self.image_config
+    
+    def get_voice_config(self):
+        """获取语音配置"""
+        return self.voice_config
+    
+    def get_app_config(self):
+        """获取应用配置"""
+        return self.app_config
+    
+    def get_image_providers(self):
+        """获取可用的图像生成提供商"""
+        image_gen = self.image_config.get('image_generation', {})
+        providers = []
+        
+        if image_gen.get('pollinations', {}).get('enabled', False):
+            providers.append('pollinations')
+        if image_gen.get('comfyui', {}).get('enabled', False):
+            providers.append('comfyui')
+        if image_gen.get('stability', {}).get('enabled', False):
+            providers.append('stability')
+        if image_gen.get('dalle', {}).get('enabled', False):
+            providers.append('dalle')
+            
+        return providers
+    
+    def get_voice_providers(self):
+        """获取可用的语音提供商"""
+        engines = self.voice_config.get('voice_generation', {}).get('engines', {})
+        providers = []
+        
+        if engines.get('edge_tts', {}).get('enabled', False):
+            providers.append('edge_tts')
+        if engines.get('siliconflow', {}).get('enabled', False):
+            providers.append('siliconflow')
+        if engines.get('openai_tts', {}).get('enabled', False):
+            providers.append('openai_tts')
+            
+        return providers
 
     def get_model_by_name(self, name):
         for model in self.config.get("models", []):

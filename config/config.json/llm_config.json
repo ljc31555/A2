@@ -1,0 +1,48 @@
+{
+    "models": [
+        {
+            "name": "通义千问",
+            "type": "tongyi",
+            "key": "sk-ab30df729a9b4df287db20a8f47ba12c",
+            "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+            "model": "qwen-turbo"
+        },
+        {
+            "name": "智谱AI",
+            "type": "zhipu",
+            "key": "ed7ffe9976bb4484ab16647564c0cb27.rI1BXVjDDDURMtJY",
+            "url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+            "model": "glm-4"
+        },
+        {
+            "name": "Deepseek",
+            "type": "deepseek",
+            "key": "sk-1c342205145441199db9f684e8158b7f",
+            "url": "https://api.deepseek.com/v1/chat/completions",
+            "model": "deepseek-chat"
+        },
+        {
+            "name": "Google Gemini",
+            "type": "google",
+            "key": "AIzaSyA3Nh4nxQYoaZRxlJWUpvvVR_kU-ihITok",
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "model": "gemini-1.5-flash"
+        },
+        {
+            "name": "OpenAI",
+            "type": "openai",
+            "key": "YOUR_OPENAI_API_KEY_HERE",
+            "url": "https://api.openai.com/v1/chat/completions",
+            "model": "gpt-3.5-turbo",
+            "enabled": false
+        },
+        {
+            "name": "SiliconFlow",
+            "type": "siliconflow",
+            "key": "YOUR_SILICONFLOW_API_KEY_HERE",
+            "url": "https://api.siliconflow.cn/v1/chat/completions",
+            "model": "Qwen/Qwen2.5-7B-Instruct",
+            "enabled": false
+        }
+    ]
+}

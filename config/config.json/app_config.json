@@ -1,0 +1,37 @@
+{
+  "app_settings": {
+    "version": "2.0.0",
+    "debug_mode": false,
+    "log_level": "INFO",
+    "auto_save": true,
+    "backup_enabled": true
+  },
+  "ui_settings": {
+    "theme": "dark",
+    "language": "zh-CN",
+    "selected_style": "吉卜力风格",
+    "window_size": {
+      "width": 1200,
+      "height": 800
+    }
+  },
+  "project_settings": {
+    "default_project_dir": "projects",
+    "auto_backup_interval": 300,
+    "max_backup_files": 10
+  },
+  "output_settings": {
+    "base_output_dir": "output",
+    "video_format": "mp4",
+    "video_quality": "high",
+    "audio_format": "mp3",
+    "image_format": "png"
+  },
+  "performance_settings": {
+    "max_concurrent_requests": 3,
+    "request_timeout": 60,
+    "retry_attempts": 3,
+    "cache_enabled": true,
+    "cache_size_mb": 100
+  }
+}

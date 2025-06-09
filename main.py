@@ -10,7 +10,7 @@ import atexit
 # 使用绝对路径并插入到sys.path开头
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 from utils.logger import logger
-from gui.main_window import MainWindow
+from gui.new_main_window import NewMainWindow
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import qInstallMessageHandler, QtMsgType
 
@@ -94,17 +94,17 @@ if __name__ == "__main__":
         sys.excepthook = handle_exception
         logger.info("全局异常处理器已安装")
         
-        window = MainWindow()
-        logger.info("MainWindow创建成功")
+        window = NewMainWindow()
+        logger.info("NewMainWindow创建成功")
         
         window.show()
-        logger.info("MainWindow显示成功，开始事件循环")
+        logger.info("NewMainWindow显示成功，开始事件循环")
 
         exit_code = app.exec_()
         logger.info(f"事件循环结束，退出码: {exit_code}")
         
-        del window  # 在事件循环退出后销毁 MainWindow，确保 QWebEngineView 生命周期完整
-        logger.info("MainWindow已销毁")
+        del window  # 在事件循环退出后销毁 NewMainWindow，确保组件生命周期完整
+        logger.info("NewMainWindow已销毁")
         
         sys.exit(exit_code)
         

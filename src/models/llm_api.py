@@ -25,6 +25,9 @@ class LLMApi:
         elif self.api_type == "zhipu":
             self.shots_model_name = "glm-4-flash"
             self.rewrite_model_name = "glm-4-flash"
+        elif self.api_type == "google":
+            self.shots_model_name = "gemini-1.5-flash"
+            self.rewrite_model_name = "gemini-1.5-flash"
         else:
             # print(f"警告 (LLMApi __init__): 未知的 api_type '{self.api_type}'。将尝试使用 deepseek-chat 作为默认模型。")
             self.shots_model_name = "deepseek-chat"
@@ -388,18 +391,38 @@ class LLMApi:
         返回 message.content 的内容，可能是 str, dict, 或 None。
         出错时返回错误描述字符串。
         """
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        payload = {
-            "model": model_name,
-            "messages": messages
-        }
-        
-        # 智能构建URL - 如果已包含endpoint则直接使用，否则添加
-        if self.api_url.endswith('/chat/completions'):
-            full_url = self.api_url
+        # 根据API类型设置不同的请求格式
+        if self.api_type == "google":
+            headers = {"Content-Type": "application/json"}
+            # Google API使用API key作为查询参数
+            full_url = f"{self.api_url}?key={self.api_key}"
+            # 转换消息格式为Google Gemini格式
+            contents = []
+            for msg in messages:
+                if msg["role"] == "user":
+                    contents.append({"parts": [{"text": msg["content"]}]})
+                elif msg["role"] == "assistant":
+                    contents.append({"parts": [{"text": msg["content"]}]})
+            payload = {
+                "contents": contents,
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 2048
+                }
+            }
         else:
-            endpoint = "/chat/completions"
-            full_url = f"{self.api_url.rstrip('/')}{endpoint}"
+            headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": model_name,
+                "messages": messages
+            }
+            
+            # 智能构建URL - 如果已包含endpoint则直接使用，否则添加
+            if self.api_url.endswith('/chat/completions'):
+                full_url = self.api_url
+            else:
+                endpoint = "/chat/completions"
+                full_url = f"{self.api_url.rstrip('/')}{endpoint}"
         
         max_retries = 2  # 优化：减少重试次数
         retry_delay = 3  # 优化：减少重试间隔
@@ -437,21 +460,41 @@ class LLMApi:
                 response_data = resp.json()
                 logger.info(f"JSON解析成功，响应数据长度: {len(str(response_data))}")
                 
-                if response_data and "choices" in response_data and len(response_data["choices"]) > 0:
-                    message = response_data["choices"][0].get("message", {})
-                    content = message.get("content")
-                    
-                    # 验证API密钥是否有效
-                    if content and "invalid api key" in content.lower():
-                        return f"API密钥无效，请检查配置"
-                        
-                    logger.debug(f"API调用成功 ({task_name}) 尝试 {attempt+1}/{max_retries}. 完整响应数据: {json.dumps(response_data, ensure_ascii=False, indent=2)}")
-                    logger.debug(f"API调用成功 ({task_name}) 尝试 {attempt+1}/{max_retries}. 提取内容: {content}")
-                    return content
-                else:
-                    error_message = f"API响应格式不正确，请稍后重试"
+                # 根据API类型解析不同的响应格式
+                if self.api_type == "google":
+                    # Google Gemini API响应格式
+                    if response_data and "candidates" in response_data and len(response_data["candidates"]) > 0:
+                        candidate = response_data["candidates"][0]
+                        if "content" in candidate and "parts" in candidate["content"]:
+                            content = candidate["content"]["parts"][0].get("text")
+                            
+                            # 验证API密钥是否有效
+                            if content and "invalid api key" in content.lower():
+                                return f"API密钥无效，请检查配置"
+                                
+                            logger.debug(f"API调用成功 ({task_name}) 尝试 {attempt+1}/{max_retries}. 完整响应数据: {json.dumps(response_data, ensure_ascii=False, indent=2)}")
+                            logger.debug(f"API调用成功 ({task_name}) 尝试 {attempt+1}/{max_retries}. 提取内容: {content}")
+                            return content
+                    error_message = f"Google API响应格式不正确，请稍后重试"
                     logger.warning(f"API调用失败 ({task_name}) 尝试 {attempt+1}/{max_retries}: {error_message}")
                     return error_message
+                else:
+                    # OpenAI格式的API响应
+                    if response_data and "choices" in response_data and len(response_data["choices"]) > 0:
+                        message = response_data["choices"][0].get("message", {})
+                        content = message.get("content")
+                        
+                        # 验证API密钥是否有效
+                        if content and "invalid api key" in content.lower():
+                            return f"API密钥无效，请检查配置"
+                            
+                        logger.debug(f"API调用成功 ({task_name}) 尝试 {attempt+1}/{max_retries}. 完整响应数据: {json.dumps(response_data, ensure_ascii=False, indent=2)}")
+                        logger.debug(f"API调用成功 ({task_name}) 尝试 {attempt+1}/{max_retries}. 提取内容: {content}")
+                        return content
+                    else:
+                        error_message = f"API响应格式不正确，请稍后重试"
+                        logger.warning(f"API调用失败 ({task_name}) 尝试 {attempt+1}/{max_retries}: {error_message}")
+                        return error_message
                     
             except requests.exceptions.Timeout as e:
                 logger.error(f"API调用超时异常 ({task_name}) 尝试 {attempt+1}/{max_retries}: {str(e)}")

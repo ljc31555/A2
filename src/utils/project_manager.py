@@ -12,8 +12,12 @@ class ProjectManager:
     
     def __init__(self, config_dir: str):
         self.config_dir = config_dir
-        self.projects_dir = os.path.join(config_dir, 'projects')
+        # 将项目保存到output文件夹下，而不是config/projects
+        # 获取项目根目录（AI_Video_Generator）
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        self.projects_dir = os.path.join(project_root, 'output')
         os.makedirs(self.projects_dir, exist_ok=True)
+        logger.info(f"项目管理器初始化，项目保存目录: {self.projects_dir}")
         
     def create_project_structure(self, project_name: str) -> str:
         """创建项目文件夹结构

@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QLabel, QPushButton,
     QPlainTextEdit, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QAbstractItemView, QScrollArea, QGridLayout, QFrame, QSpacerItem,
-    QSizePolicy, QMessageBox
+    QSizePolicy, QMessageBox, QDialog
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
@@ -55,7 +55,44 @@ class StoryboardTab(QWidget):
         self.fullscreen_shots_widget = None
         
         self.init_ui()
-        self.load_models()
+        
+        # 连接文本变化信号，自动从主窗口同步已改写的文本
+        if self.parent_window:
+            self.load_rewritten_text_from_main()
+    
+    def load_models(self):
+        """加载大模型列表"""
+        try:
+            # 使用 ConfigManager 实例获取模型列表
+            all_model_configs = self.config_manager.config.get("models", [])
+            model_names = [cfg.get("name") for cfg in all_model_configs if cfg.get("name")]
+            
+            self.model_combo.clear()
+            if model_names:
+                self.model_combo.addItems(model_names)
+                logger.debug(f"加载模型列表成功: {model_names}")
+            else:
+                self.model_combo.addItem("未配置模型")
+                logger.warning("未找到模型配置")
+        except Exception as e:
+            logger.error(f"加载模型列表失败: {e}")
+            self.model_combo.addItem("加载失败")
+    
+    def get_current_model(self):
+        """获取当前选择的模型"""
+        if hasattr(self, 'model_combo') and self.model_combo:
+            return self.model_combo.currentText()
+        return None
+    
+    def on_model_changed(self, model_name):
+        """模型选择变化时的处理"""
+        try:
+            logger.debug(f"模型选择变化: {model_name}")
+            # 重置LLM API对象，强制重新初始化
+            self.llm_api = None
+            logger.info(f"已重置LLM API，将在下次分镜生成时使用模型: {model_name}")
+        except Exception as e:
+            logger.error(f"处理模型选择变化时出错: {e}")
     
     def _auto_save_project(self):
         """自动保存项目状态"""
@@ -84,41 +121,43 @@ class StoryboardTab(QWidget):
         left_layout.addWidget(QLabel("请输入小说原文或内容文本（支持 Markdown/TXT）："))
         
         self.text_input = QPlainTextEdit()
-        self.text_input.setPlaceholderText("在此输入或粘贴小说原文、分镜脚本等内容...")
-        self.text_input.setToolTip("输入原文或脚本，支持Markdown/TXT")
+        self.text_input.setPlaceholderText("此处将自动显示第一个标签页改写后的文本内容，\n您也可以在此输入或编辑自定义文本...")
+        self.text_input.setToolTip("显示第一个标签页改写后的文本内容，或输入自定义文本进行分镜生成")
         left_layout.addWidget(self.text_input)
 
+        # 风格选择和大模型选择布局
+        style_model_layout = QHBoxLayout()
+        
         # 风格选择下拉框
-        style_select_layout = QHBoxLayout()
         self.style_combo = QComboBox()
         self.style_combo.addItems([
             "电影风格", "动漫风格", "吉卜力风格", "赛博朋克风格", "水彩插画风格", "像素风格", "写实摄影风格"
         ])
         # 连接风格选择变化事件
         self.style_combo.currentTextChanged.connect(self.on_style_changed)
-        style_select_layout.addWidget(QLabel("选择风格："))
-        style_select_layout.addWidget(self.style_combo)
-        style_select_layout.addStretch()
+        style_model_layout.addWidget(QLabel("选择风格："))
+        style_model_layout.addWidget(self.style_combo)
         self.style_combo.setToolTip("选择分镜和生图的风格模板")
-        left_layout.addLayout(style_select_layout)
+        
+        # 添加间距
+        style_model_layout.addSpacing(20)
+        
+        # 大模型选择下拉框
+        self.model_combo = QComboBox()
+        self.model_combo.setToolTip("选择用于分镜生成的大模型")
+        # 连接模型选择变化事件，重置API实例
+        self.model_combo.currentTextChanged.connect(self.on_model_changed)
+        style_model_layout.addWidget(QLabel("选择大模型："))
+        style_model_layout.addWidget(self.model_combo)
+        
+        style_model_layout.addStretch()
+        left_layout.addLayout(style_model_layout)
         
         # 恢复上次选择的风格
         self.restore_style_selection()
-
-        # 模型选择下拉框
-        model_select_layout = QHBoxLayout()
-        self.model_combo = QComboBox()
-        model_select_layout.addWidget(QLabel("选择大模型："))
-        model_select_layout.addWidget(self.model_combo)
-        model_select_layout.addStretch()
-        self.model_combo.setToolTip("选择用于改写/分镜的大模型")
-        left_layout.addLayout(model_select_layout)
         
-        # 改写文章按钮
-        self.rewrite_btn = QPushButton("改写文章")
-        self.rewrite_btn.clicked.connect(self.handle_rewrite_btn)
-        self.rewrite_btn.setToolTip("点击调用大模型对文本进行改写")
-        left_layout.addWidget(self.rewrite_btn)
+        # 加载模型列表
+        self.load_models()
         
         left_widget.setLayout(left_layout)
 
@@ -147,13 +186,45 @@ class StoryboardTab(QWidget):
         
         right_layout.addLayout(button_layout)
         
-        # 添加分镜生成专用进度条
+        # 添加改写文章专用进度条
         from PyQt5.QtWidgets import QProgressBar
+        self.rewrite_progress = QProgressBar()
+        self.rewrite_progress.setVisible(False)  # 初始时隐藏
+        self.rewrite_progress.setFixedHeight(32)
+        self.rewrite_progress.setMinimumWidth(200)
+        # 设置改写进度条样式
+        self.rewrite_progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #ff9800;
+                border-radius: 8px;
+                text-align: center;
+                background-color: #f8f9fa;
+                height: 32px;
+                font-size: 14px;
+                color: #2c3e50;
+                font-weight: bold;
+                padding: 2px;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, 
+                                          stop: 0 #ffcc80, stop: 1 #ff9800);
+                border-radius: 6px;
+                margin: 1px;
+            }
+            QProgressBar:indeterminate {
+                background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0, 
+                                          stop: 0 #fff3e0, stop: 0.5 #ff9800, stop: 1 #fff3e0);
+                border-radius: 6px;
+            }
+        """)
+        right_layout.addWidget(self.rewrite_progress)
+        
+        # 添加分镜生成专用进度条
         self.storyboard_progress = QProgressBar()
         self.storyboard_progress.setVisible(False)  # 初始时隐藏
         self.storyboard_progress.setFixedHeight(32)
         self.storyboard_progress.setMinimumWidth(200)
-        # 设置进度条样式
+        # 设置分镜进度条样式
         self.storyboard_progress.setStyleSheet("""
             QProgressBar {
                 border: 2px solid #1976d2;
@@ -202,150 +273,105 @@ class StoryboardTab(QWidget):
         layout.addWidget(storyboard_splitter)
         self.setLayout(layout)
         
-    def load_models(self):
-        """加载模型列表"""
+    def load_rewritten_text_from_main(self):
+        """从主窗口加载已改写的文本"""
         try:
-            # 使用 ConfigManager 实例获取模型列表
-            all_model_configs = self.config_manager.config.get("models", [])
-            model_names = [cfg.get("name") for cfg in all_model_configs if cfg.get("name")]
+            if hasattr(self.parent_window, 'rewritten_text') and self.parent_window.rewritten_text:
+                rewritten_text = self.parent_window.rewritten_text.toPlainText().strip()
+                if rewritten_text:
+                    self.text_input.setPlainText(rewritten_text)
+                    logger.info("已从主窗口加载改写文本到分镜生成标签页")
+                    return True
             
-            self.model_combo.clear()
-            if model_names:
-                self.model_combo.addItems(model_names)
-                logger.debug(f"加载模型列表成功: {model_names}")
-            else:
-                self.model_combo.addItem("未配置模型")
-                logger.warning("未找到模型配置")
+            # 如果主窗口没有改写文本，从项目管理器加载
+            if hasattr(self.parent_window, 'project_manager') and self.parent_window.project_manager.current_project:
+                rewritten_text = self.parent_window.project_manager.load_text_content("rewritten_text")
+                if rewritten_text:
+                    self.text_input.setPlainText(rewritten_text)
+                    logger.info("已从项目文件加载改写文本到分镜生成标签页")
+                    return True
+            
+            return False
         except Exception as e:
-            logger.error(f"加载模型列表失败: {e}")
-            self.model_combo.addItem("加载失败")
+            logger.error(f"加载改写文本失败: {e}")
+            return False
     
-    def refresh_model_combo(self):
-        """刷新模型下拉框"""
-        logger.info("StoryboardTab: refresh_model_combo 函数开始执行")
-        self.load_models()
-    
-    def handle_rewrite_btn(self):
-        """处理改写文章按钮点击"""
-        try:
-            input_text = self.text_input.toPlainText().strip()
-            if not input_text:
-                QMessageBox.warning(self, "警告", "请先输入要改写的文本内容")
-                return
-            
-            # 检查是否有当前项目，如果没有则弹出项目命名对话框
-            if not self.current_project_name:
-                dialog = ProjectNameDialog(self)
-                if dialog.exec_() == dialog.Accepted:
-                    project_info = dialog.get_project_info()
-                    project_name = project_info['name']
-                    project_description = project_info['description']
-                    
-                    # 设置当前项目信息
-                    self.current_project_name = project_name
-                    self.current_project_root = self.project_manager.create_project_structure(project_name)
-                    
-                    # 通知主窗口更新项目信息
-                    if hasattr(self.parent_window, 'set_current_project'):
-                        self.parent_window.set_current_project(project_name, project_description)
-                    
-                    logger.info(f"新项目已创建: {project_name}")
-                else:
-                    # 用户取消了项目命名，不继续改写
-                    return
-            
-            selected_model = self.model_combo.currentText()
-            if selected_model in ["未配置模型", "加载失败"]:
-                QMessageBox.warning(self, "警告", "请先在设置中配置大模型")
-                return
-            
-            # 初始化LLM API
-            if not self.llm_api:
-                all_model_configs = self.config_manager.config.get("models", [])
-                model_config = None
-                for cfg in all_model_configs:
-                    if cfg.get("name") == selected_model:
-                        model_config = cfg
-                        break
-                
-                if model_config:
-                    self.llm_api = LLMApi(
-                        api_type=model_config.get('type', 'deepseek'),
-                        api_key=model_config.get('key', ''),
-                        api_url=model_config.get('url', '')
-                    )
-                else:
-                    QMessageBox.warning(self, "错误", "模型配置不完整")
-                    return
-            
-            # 获取选择的风格
-            selected_style = self.style_combo.currentText()
-            
-            # 显示进度条
-            self.show_progress("🔄 正在改写文本，请稍候...")
-            
-            # 调用大模型进行改写
-            self.rewrite_btn.setEnabled(False)
-            self.rewrite_btn.setText("🔄 改写中...")
-            
-            # 检查是否已有线程在运行
-            if self.rewrite_thread and self.rewrite_thread.isRunning():
-                QMessageBox.warning(self, "警告", "文本改写正在进行中，请稍候...")
-                return
-            
-            # 创建并启动改写线程
-            self.rewrite_thread = TextRewriteThread(self.llm_api, input_text)
-            self.rewrite_thread.progress_updated.connect(self.show_progress)
-            self.rewrite_thread.rewrite_completed.connect(self._on_rewrite_completed)
-            self.rewrite_thread.error_occurred.connect(self._on_rewrite_error)
-            self.rewrite_thread.finished.connect(self._on_rewrite_finished)
-            self.rewrite_thread.start()
-                
-        except Exception as e:
-            logger.error(f"启动改写线程时发生错误: {e}")
-            QMessageBox.critical(self, "错误", f"启动改写失败: {str(e)}")
-            self._reset_rewrite_ui()
+
     
     def handle_generate_shots_btn(self):
         """处理生成分镜按钮点击"""
         try:
-            output_text = self.output_text.toPlainText().strip()
-            if not output_text:
-                QMessageBox.warning(self, "警告", "请先改写文本或输入分镜内容")
+            # 检查是否有项目，如果没有则强制创建
+            if not self.parent_window or not hasattr(self.parent_window, 'project_manager') or not self.parent_window.project_manager.current_project:
+                QMessageBox.information(
+                    self, 
+                    "需要创建项目", 
+                    "生成分镜需要先创建一个项目。\n请返回第一个标签页创建项目。"
+                )
+                # 自动切换到第一个标签页
+                if self.parent_window and hasattr(self.parent_window, 'tab_widget'):
+                    self.parent_window.tab_widget.setCurrentIndex(0)
                 return
+            
+            # 获取输入文本（左侧的文本输入框）
+            input_text = self.text_input.toPlainText().strip()
+            if not input_text:
+                # 尝试从主窗口加载改写文本
+                if not self.load_rewritten_text_from_main():
+                    QMessageBox.warning(self, "警告", "请先输入文本内容或在第一个标签页完成文本改写")
+                    return
+                input_text = self.text_input.toPlainText().strip()
             
             # 设置生成状态
             self.is_generating = True
             self.stop_generation = False
             
-            # 初始化LLM API（如果还没有初始化）
+            # 从主窗口获取LLM配置
             if not self.llm_api:
-                selected_model = self.model_combo.currentText()
-                all_model_configs = self.config_manager.config.get("models", [])
-                model_config = None
-                for cfg in all_model_configs:
-                    if cfg.get("name") == selected_model:
-                        model_config = cfg
-                        break
-                
-                if model_config:
-                    self.llm_api = LLMApi(
-                        api_type=model_config.get('type', 'deepseek'),
-                        api_key=model_config.get('key', ''),
-                        api_url=model_config.get('url', '')
-                    )
+                if self.parent_window and hasattr(self.parent_window, 'app_controller'):
+                    # 使用选择的大模型配置
+                    try:
+                        selected_model = self.get_current_model()
+                        if selected_model in ["未配置模型", "加载失败", None]:
+                            QMessageBox.warning(self, "错误", "请选择一个有效的大模型")
+                            self.is_generating = False
+                            return
+                        
+                        # 获取选择的模型配置
+                        all_model_configs = self.config_manager.config.get("models", [])
+                        model_config = None
+                        for cfg in all_model_configs:
+                            if cfg.get("name") == selected_model:
+                                model_config = cfg
+                                break
+                        
+                        if not model_config:
+                            QMessageBox.warning(self, "错误", f"未找到模型 '{selected_model}' 的配置")
+                            self.is_generating = False
+                            return
+                        
+                        # 初始化LLM API
+                        self.llm_api = LLMApi(
+                            api_type=model_config.get('type', 'deepseek'),
+                            api_key=model_config.get('key', ''),
+                            api_url=model_config.get('url', '')
+                        )
+                        logger.info(f"使用选择的模型配置: {model_config.get('name', 'unknown')}")
+                    except Exception as e:
+                        QMessageBox.warning(self, "错误", f"初始化LLM API失败: {e}")
+                        self.is_generating = False
+                        return
                 else:
-                    QMessageBox.warning(self, "错误", "模型配置不完整")
+                    QMessageBox.warning(self, "错误", "无法获取LLM配置")
                     self.is_generating = False
                     return
             
-            # 初始化文本解析器
-            if not self.text_parser:
-                selected_style = self.style_combo.currentText()
-                self.text_parser = TextParser(llm_api=self.llm_api, style=selected_style)
+            # 创建文本解析器
+            selected_style = self.style_combo.currentText()
+            self.text_parser = TextParser(llm_api=self.llm_api, style=selected_style)
             
-            # 显示进度条
-            self.show_progress("🎬 正在生成分镜，请稍候...")
+            # 显示分镜进度条
+            self.show_progress("🎬 正在生成分镜，请稍候...", "storyboard")
             
             # 更新按钮状态
             self.generate_shots_btn.setEnabled(False)
@@ -363,7 +389,7 @@ class StoryboardTab(QWidget):
                 return
             
             # 创建并启动分镜生成线程
-            self.shots_thread = ShotsGenerationThread(self.text_parser, output_text)
+            self.shots_thread = ShotsGenerationThread(self.text_parser, input_text)
             self.shots_thread.progress_updated.connect(self.show_progress)
             self.shots_thread.shots_generated.connect(self._on_shots_generated)
             self.shots_thread.error_occurred.connect(self._on_shots_error)
@@ -400,53 +426,100 @@ class StoryboardTab(QWidget):
             # 重置UI状态
             self._reset_shots_ui()
     
-    def show_progress(self, message="⏳ 处理中，请稍候..."):
-        """显示进度条"""
+    def show_progress(self, message="⏳ 处理中，请稍候...", progress_type="storyboard"):
+        """显示进度条
+        Args:
+            message: 进度消息
+            progress_type: 进度条类型，'rewrite' 或 'storyboard'
+        """
         try:
-            # 使用分镜界面专用的进度条
-            if hasattr(self, 'storyboard_progress'):
-                # 设置进度条属性
-                self.storyboard_progress.setVisible(True)
-                self.storyboard_progress.setRange(0, 0)  # 设置为不确定进度条
-                self.storyboard_progress.setFormat(message)  # 设置显示文本
-                self.storyboard_progress.setTextVisible(True)  # 确保文本可见
-                
-                # 强制刷新界面
-                self.storyboard_progress.update()
-                from PyQt5.QtWidgets import QApplication
-                QApplication.instance().processEvents()
-                
-                # 在日志中显示消息
-                if self.parent_window and hasattr(self.parent_window, 'log_output_bottom'):
-                    self.parent_window.log_output_bottom.appendPlainText(f"[分镜进度] {message}")
-                logger.info(f"分镜进度条已显示: {message}, 可见性: {self.storyboard_progress.isVisible()}")
+            if progress_type == "rewrite":
+                # 使用改写文章专用的进度条
+                if hasattr(self, 'rewrite_progress'):
+                    # 设置进度条属性
+                    self.rewrite_progress.setVisible(True)
+                    self.rewrite_progress.setRange(0, 0)  # 设置为不确定进度条
+                    self.rewrite_progress.setFormat(message)  # 设置显示文本
+                    self.rewrite_progress.setTextVisible(True)  # 确保文本可见
+                    
+                    # 强制刷新界面
+                    self.rewrite_progress.update()
+                    from PyQt5.QtWidgets import QApplication
+                    QApplication.instance().processEvents()
+                    
+                    # 在日志中显示消息
+                    if self.parent_window and hasattr(self.parent_window, 'log_output_bottom'):
+                        self.parent_window.log_output_bottom.appendPlainText(f"[改写进度] {message}")
+                    logger.info(f"改写进度条已显示: {message}, 可见性: {self.rewrite_progress.isVisible()}")
+                else:
+                    logger.warning("未找到改写进度条组件")
             else:
-                logger.warning("未找到分镜进度条组件")
+                # 使用分镜界面专用的进度条
+                if hasattr(self, 'storyboard_progress'):
+                    # 设置进度条属性
+                    self.storyboard_progress.setVisible(True)
+                    self.storyboard_progress.setRange(0, 0)  # 设置为不确定进度条
+                    self.storyboard_progress.setFormat(message)  # 设置显示文本
+                    self.storyboard_progress.setTextVisible(True)  # 确保文本可见
+                    
+                    # 强制刷新界面
+                    self.storyboard_progress.update()
+                    from PyQt5.QtWidgets import QApplication
+                    QApplication.instance().processEvents()
+                    
+                    # 在日志中显示消息
+                    if self.parent_window and hasattr(self.parent_window, 'log_output_bottom'):
+                        self.parent_window.log_output_bottom.appendPlainText(f"[分镜进度] {message}")
+                    logger.info(f"分镜进度条已显示: {message}, 可见性: {self.storyboard_progress.isVisible()}")
+                else:
+                    logger.warning("未找到分镜进度条组件")
         except Exception as e:
-            logger.error(f"显示分镜进度条时发生错误: {e}")
+            logger.error(f"显示进度条时发生错误: {e}")
     
-    def hide_progress(self):
-        """隐藏进度条"""
+    def hide_progress(self, progress_type="storyboard"):
+        """隐藏进度条
+        Args:
+            progress_type: 进度条类型，'rewrite' 或 'storyboard'
+        """
         try:
-            # 使用分镜界面专用的进度条
-            if hasattr(self, 'storyboard_progress'):
-                self.storyboard_progress.setVisible(False)
-                self.storyboard_progress.setFormat("")  # 清空显示文本
-                self.storyboard_progress.setTextVisible(False)  # 隐藏文本
-                
-                # 强制刷新界面
-                self.storyboard_progress.update()
-                from PyQt5.QtWidgets import QApplication
-                QApplication.instance().processEvents()
-                
-                # 在日志中显示消息
-                if self.parent_window and hasattr(self.parent_window, 'log_output_bottom'):
-                    self.parent_window.log_output_bottom.appendPlainText("✅ 分镜操作完成")
-                logger.info(f"分镜进度条已隐藏，可见性: {self.storyboard_progress.isVisible()}")
+            if progress_type == "rewrite":
+                # 隐藏改写文章专用的进度条
+                if hasattr(self, 'rewrite_progress'):
+                    self.rewrite_progress.setVisible(False)
+                    self.rewrite_progress.setFormat("")  # 清空显示文本
+                    self.rewrite_progress.setTextVisible(False)  # 隐藏文本
+                    
+                    # 强制刷新界面
+                    self.rewrite_progress.update()
+                    from PyQt5.QtWidgets import QApplication
+                    QApplication.instance().processEvents()
+                    
+                    # 在日志中显示消息
+                    if self.parent_window and hasattr(self.parent_window, 'log_output_bottom'):
+                        self.parent_window.log_output_bottom.appendPlainText("✅ 改写操作完成")
+                    logger.info(f"改写进度条已隐藏，可见性: {self.rewrite_progress.isVisible()}")
+                else:
+                    logger.warning("未找到改写进度条组件")
             else:
-                logger.warning("未找到分镜进度条组件")
+                # 隐藏分镜界面专用的进度条
+                if hasattr(self, 'storyboard_progress'):
+                    self.storyboard_progress.setVisible(False)
+                    self.storyboard_progress.setFormat("")  # 清空显示文本
+                    self.storyboard_progress.setTextVisible(False)  # 隐藏文本
+                    
+                    # 强制刷新界面
+                    self.storyboard_progress.update()
+                    from PyQt5.QtWidgets import QApplication
+                    QApplication.instance().processEvents()
+                    
+                    # 在日志中显示消息
+                    if self.parent_window and hasattr(self.parent_window, 'log_output_bottom'):
+                        self.parent_window.log_output_bottom.appendPlainText("✅ 分镜操作完成")
+                    logger.info(f"分镜进度条已隐藏，可见性: {self.storyboard_progress.isVisible()}")
+                else:
+                    logger.warning("未找到分镜进度条组件")
         except Exception as e:
-            logger.error(f"隐藏分镜进度条时发生错误: {e}")
+            logger.error(f"隐藏进度条时发生错误: {e}")
     
     def show_shots_table(self, shots_data):
         print(f"[DEBUG] storyboard_tab.show_shots_table - shots_data: {shots_data}")
@@ -476,10 +549,6 @@ class StoryboardTab(QWidget):
             if hasattr(widget, 'on_shots_alternative_image_selected'):
                 return widget
         return None
-    
-    def get_current_model(self):
-        """获取当前选择的模型"""
-        return self.model_combo.currentText()
     
     def get_current_style(self):
         """获取当前选择的风格"""
@@ -1764,41 +1833,6 @@ class StoryboardTab(QWidget):
             QMessageBox.critical(self, "错误", f"绘图功能出错: {str(e)}")
     
     # 线程回调方法
-    def _on_rewrite_completed(self, response):
-        """文本改写完成回调"""
-        try:
-            self.output_text.setPlainText(response)
-            
-            # 保存改写后的文本到项目文件夹
-            if self.current_project_root:
-                try:
-                    rewritten_file = os.path.join(self.current_project_root, 'texts', 'rewritten.txt')
-                    with open(rewritten_file, 'w', encoding='utf-8') as f:
-                        f.write(response)
-                    logger.info(f"改写文本已保存到: {rewritten_file}")
-                except Exception as e:
-                    logger.error(f"保存改写文本失败: {e}")
-            
-            # 自动保存项目状态
-            self._auto_save_project()
-            
-            logger.info("文本改写完成")
-        except Exception as e:
-            logger.error(f"处理改写完成回调时发生错误: {e}")
-    
-    def _on_rewrite_error(self, error_msg):
-        """文本改写错误回调"""
-        QMessageBox.warning(self, "错误", error_msg)
-    
-    def _on_rewrite_finished(self):
-        """文本改写线程结束回调"""
-        self._reset_rewrite_ui()
-    
-    def _reset_rewrite_ui(self):
-        """重置改写UI状态"""
-        self.rewrite_btn.setEnabled(True)
-        self.rewrite_btn.setText("改写文章")
-        self.hide_progress()
     
     def _on_shots_generated(self, shots_data):
         """分镜生成完成回调"""
@@ -1807,8 +1841,25 @@ class StoryboardTab(QWidget):
             if hasattr(self, 'parent_window') and self.parent_window:
                 self.parent_window.shots_data = shots_data
                 logger.debug(f"分镜数据已保存到主窗口，共 {len(shots_data)} 个分镜")
+            
+            # 保存分镜数据到项目文件夹
+            if self.current_project_root and shots_data:
+                try:
+                    shots_dir = os.path.join(self.current_project_root, 'shots')
+                    os.makedirs(shots_dir, exist_ok=True)
+                    shots_file = os.path.join(shots_dir, 'shots.json')
+                    
+                    with open(shots_file, 'w', encoding='utf-8') as f:
+                        json.dump(shots_data, f, ensure_ascii=False, indent=2)
+                    logger.info(f"分镜数据已保存到: {shots_file}")
+                except Exception as e:
+                    logger.error(f"保存分镜数据失败: {e}")
+            
+            # 自动保存项目状态
+            self._auto_save_project()
+            
             self.show_shots_table(shots_data)
-            logger.info(f"成功生成 {len(shots_data)} 个分镜")
+            logger.info(f"成功生成 {len(shots_data)} 个分镜并已自动保存项目")
         except Exception as e:
             logger.error(f"处理分镜生成完成回调时发生错误: {e}")
     
@@ -1827,7 +1878,7 @@ class StoryboardTab(QWidget):
         self.generate_shots_btn.setEnabled(True)
         self.generate_shots_btn.setText("生成分镜")
         self.stop_generate_btn.setEnabled(False)
-        self.hide_progress()
+        self.hide_progress("storyboard")
     
     def get_current_settings(self):
         """获取当前文本转镜头设置"""

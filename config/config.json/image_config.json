@@ -1,0 +1,32 @@
+{
+  "image_generation": {
+    "default_engine": "pollinations",
+    "pollinations": {
+      "enabled": true,
+      "base_url": "https://image.pollinations.ai/prompt",
+      "timeout": 30,
+      "max_retries": 3
+    },
+    "comfyui": {
+      "enabled": false,
+      "base_url": "http://127.0.0.1:8188",
+      "default_workflow": "flux.1-dev",
+      "timeout": 60
+    },
+    "stability": {
+      "enabled": false,
+      "api_key": "YOUR_STABILITY_API_KEY_HERE",
+      "base_url": "https://api.stability.ai"
+    },
+    "dalle": {
+      "enabled": false,
+      "api_key": "YOUR_OPENAI_API_KEY_HERE",
+      "model": "dall-e-3"
+    }
+  },
+  "output": {
+    "directory": "output/images",
+    "format": "png",
+    "quality": 95
+  }
+}
