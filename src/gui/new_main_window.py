@@ -32,6 +32,7 @@ from processors.image_processor import ImageGenerationConfig, BatchImageResult
 from processors.video_processor import VideoConfig
 from utils.logger import logger
 from gui.storyboard_tab import StoryboardTab
+from gui.four_stage_storyboard_tab import FourStageStoryboardTab
 from gui.project_dialog import NewProjectDialog, OpenProjectDialog
 
 # 导入主题系统
@@ -120,6 +121,9 @@ class NewMainWindow(QMainWindow):
         # 初始化项目管理器
         self.project_manager = ProjectManager()
         
+        # 当前项目名称
+        self.current_project_name = None
+        
         # 当前工作线程
         self.current_worker = None
         
@@ -139,6 +143,8 @@ class NewMainWindow(QMainWindow):
         self.update_text_placeholder()
         
         logger.info("新主窗口初始化完成")
+    
+
     
     def init_ui(self):
         """初始化用户界面"""
@@ -227,9 +233,13 @@ class NewMainWindow(QMainWindow):
         self.text_tab = self.create_text_tab()
         self.tab_widget.addTab(self.text_tab, "文本处理")
         
-        # 分镜生成标签页
+        # 分镜生成标签页（原版）
         self.storyboard_tab = self.create_storyboard_tab()
         self.tab_widget.addTab(self.storyboard_tab, "分镜生成")
+        
+        # 五阶段分镜生成标签页（新版）
+        self.four_stage_storyboard_tab = self.create_four_stage_storyboard_tab()
+        self.tab_widget.addTab(self.four_stage_storyboard_tab, "🎬 五阶段分镜")
         
         # 图像生成标签页
         self.image_tab = self.create_image_tab()
@@ -296,25 +306,27 @@ class NewMainWindow(QMainWindow):
         
         layout.addWidget(rewritten_group)
         
-        # 快速生成按钮
-        quick_generate_layout = QHBoxLayout()
+        # 改写文本进度条
+        progress_layout = QHBoxLayout()
         
-        self.quick_generate_btn = QPushButton("一键生成视频")
-        self.quick_generate_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                font-size: 14px;
+        self.rewrite_progress = QProgressBar()
+        self.rewrite_progress.setVisible(False)
+        self.rewrite_progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #28a745;
+                border-radius: 5px;
+                text-align: center;
+                font-size: 12px;
                 font-weight: bold;
-                padding: 12px 24px;
             }
-            QPushButton:hover {
-                background-color: #218838;
+            QProgressBar::chunk {
+                background-color: #28a745;
+                border-radius: 3px;
             }
         """)
-        self.quick_generate_btn.clicked.connect(self.quick_generate_video)
-        quick_generate_layout.addWidget(self.quick_generate_btn)
+        progress_layout.addWidget(self.rewrite_progress)
         
-        layout.addLayout(quick_generate_layout)
+        layout.addLayout(progress_layout)
         
         return tab
     
@@ -322,6 +334,11 @@ class NewMainWindow(QMainWindow):
         """创建分镜生成标签页"""
         # 使用重构后的StoryboardTab类
         return StoryboardTab(self)
+    
+    def create_four_stage_storyboard_tab(self):
+        """创建五阶段分镜生成标签页"""
+        # 使用新的五阶段分镜生成标签页
+        return FourStageStoryboardTab(self)
     
     def create_image_tab(self):
         """创建图像生成标签页"""
@@ -649,6 +666,9 @@ class NewMainWindow(QMainWindow):
                     project_info["description"]
                 )
                 
+                # 设置当前项目名称
+                self.current_project_name = project_info["name"]
+                
                 # 清空界面
                 self.clear_all_content()
                 
@@ -678,6 +698,9 @@ class NewMainWindow(QMainWindow):
         try:
             # 暂时禁用自动保存
             self._disable_auto_save = True
+            
+            # 清空当前项目名称
+            self.current_project_name = None
             
             # 清空文本输入
             self.text_input.clear()
@@ -724,11 +747,18 @@ class NewMainWindow(QMainWindow):
                         # 加载项目
                         project_config = self.project_manager.load_project(selected_project["path"])
                         
+                        # 设置当前项目名称
+                        self.current_project_name = project_config.get('name', selected_project["path"])
+                        
                         # 清空当前内容
                         self.clear_all_content()
                         
                         # 加载项目内容到界面
                         self.load_project_content(project_config)
+                        
+                        # 加载五阶段分镜数据
+                        if hasattr(self, 'four_stage_storyboard_tab') and self.four_stage_storyboard_tab:
+                            self.four_stage_storyboard_tab.load_from_project()
                         
                         # 更新项目状态
                         self.update_project_status()
@@ -1090,6 +1120,8 @@ class NewMainWindow(QMainWindow):
             except Exception as e:
                 logger.error(f"保存改写文本失败: {e}")
             
+            # 隐藏进度条
+            self.rewrite_progress.setVisible(False)
             self.hide_progress()
             # 更新左下角状态显示
             self.status_label.setText("✅ 文本改写完成")
@@ -1100,15 +1132,26 @@ class NewMainWindow(QMainWindow):
                 self.storyboard_tab.load_rewritten_text_from_main()
         
         def on_rewrite_error(error):
+            # 隐藏进度条
+            self.rewrite_progress.setVisible(False)
             self.hide_progress()
             # 更新左下角状态显示
             self.status_label.setText("❌ 文本改写失败")
             QMessageBox.critical(self, "改写失败", f"文本改写失败:\n{error}")
         
         def on_progress(progress, message):
+            # 显示和更新进度条
+            self.rewrite_progress.setVisible(True)
+            self.rewrite_progress.setValue(progress)
+            self.rewrite_progress.setFormat(f"正在改写文本... {progress}%")
             # 更新左下角状态显示
             self.status_label.setText(f"🔄 正在改写文章...")
             self.show_progress(progress, message)
+        
+        # 显示进度条
+        self.rewrite_progress.setVisible(True)
+        self.rewrite_progress.setValue(0)
+        self.rewrite_progress.setFormat("准备改写文本...")
         
         # 创建改写工作线程
         provider = self.storyboard_tab.rewrite_provider_combo.currentText() if hasattr(self, 'storyboard_tab') and hasattr(self.storyboard_tab, 'rewrite_provider_combo') and self.storyboard_tab.rewrite_provider_combo.currentText() != "自动选择" else None
@@ -1478,6 +1521,24 @@ class NewMainWindow(QMainWindow):
                         count = status.get("count", 0)
                         status_icon = "✅" if exists else "❌"
                         status_text += f"{status_icon} {name}: {count} 张\n"
+                    elif file_type == "storyboard" and "stage_status" in status:
+                        # 五阶段分镜脚本的特殊显示
+                        current_stage = status.get("current_stage", 1)
+                        stage_status = status.get("stage_status", {})
+                        
+                        status_text += f"📝 {name} (阶段 {current_stage}/5):\n"
+                        stage_names = {
+                            "stage_1": "  └ 世界观圣经",
+                            "stage_2": "  └ 角色管理", 
+                            "stage_3": "  └ 场景分割",
+                            "stage_4": "  └ 分镜脚本",
+                            "stage_5": "  └ 优化预览"
+                        }
+                        
+                        for stage_key, stage_name in stage_names.items():
+                            stage_done = stage_status.get(stage_key, False)
+                            stage_icon = "✅" if stage_done else "❌"
+                            status_text += f"{stage_icon} {stage_name}\n"
                     else:
                         exists = status.get("exists", False)
                         status_icon = "✅" if exists else "❌"

@@ -7,8 +7,8 @@ from typing import Dict, List, Any, Optional
 from utils.logger import logger
 from utils.character_scene_manager import CharacterSceneManager
 
-class ProjectManager:
-    """项目状态管理器 - 负责保存和恢复项目工作状态"""
+class StoryboardProjectManager:
+    """分镜项目管理器 - 负责分镜数据管理和图片处理"""
     
     def __init__(self, config_dir: str):
         self.config_dir = config_dir
@@ -295,7 +295,7 @@ class ProjectManager:
                             absolute_path = os.path.join(project_root, relative_path)
                             image_info['path'] = absolute_path
             
-            # 初始化角色场景管理器
+            # 初始化角色场景管理器（暂时不传入service_manager，因为这里没有可用的实例）
             character_scene_manager = CharacterSceneManager(project_root)
             
             # 组合完整的项目数据

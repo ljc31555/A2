@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QHeaderView, QSplitter, QFrame, QScrollArea,
     QCheckBox, QSpinBox
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QIcon
 from utils.logger import logger
 
@@ -22,17 +22,22 @@ class CharacterSceneDialog(QDialog):
     def __init__(self, character_scene_manager, parent=None):
         super().__init__(parent)
         self.character_scene_manager = character_scene_manager
+        self.parent_window = parent
         self.current_character_id = None
         self.current_scene_id = None
         
         self.init_ui()
         self.load_data()
+        # 使用QTimer延迟加载世界观圣经内容，确保UI完全初始化
+        QTimer.singleShot(100, self.load_world_bible_content)
     
     def init_ui(self):
         """初始化用户界面"""
         self.setWindowTitle("角色场景设置")
         self.setModal(True)
-        self.resize(1000, 700)
+        # 减小窗口大小并设置最大尺寸
+        self.resize(900, 600)
+        self.setMaximumSize(1200, 800)
         
         # 主布局
         main_layout = QVBoxLayout(self)
@@ -104,16 +109,29 @@ class CharacterSceneDialog(QDialog):
         self.character_table = QTableWidget()
         self.character_table.setColumnCount(3)
         self.character_table.setHorizontalHeaderLabels(["角色名称", "描述", "来源"])
-        self.character_table.horizontalHeader().setStretchLastSection(True)
+        
+        # 设置列宽
+        header = self.character_table.horizontalHeader()
+        header.setStretchLastSection(False)
+        self.character_table.setColumnWidth(0, 80)  # 角色名称列
+        self.character_table.setColumnWidth(1, 120) # 描述列
+        self.character_table.setColumnWidth(2, 80)  # 来源列
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 描述列可拉伸
+        
         self.character_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.character_table.itemSelectionChanged.connect(self.on_character_selected)
         
         left_layout.addWidget(self.character_table)
-        left_widget.setMaximumWidth(400)
+        left_widget.setMaximumWidth(320)  # 减小左侧宽度
         
-        # 右侧：角色详细信息编辑
+        # 右侧：角色详细信息编辑（添加滚动区域）
+        right_scroll = QScrollArea()
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
+        right_scroll.setWidget(right_widget)
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         
         # 角色基本信息
         basic_group = QGroupBox("基本信息")
@@ -121,7 +139,7 @@ class CharacterSceneDialog(QDialog):
         
         self.char_name_edit = QLineEdit()
         self.char_description_edit = QTextEdit()
-        self.char_description_edit.setMaximumHeight(80)
+        self.char_description_edit.setMaximumHeight(60)  # 减小高度
         
         basic_layout.addRow("角色名称:", self.char_name_edit)
         basic_layout.addRow("角色描述:", self.char_description_edit)
@@ -169,7 +187,7 @@ class CharacterSceneDialog(QDialog):
         consistency_layout = QVBoxLayout(consistency_group)
         
         self.char_consistency_edit = QTextEdit()
-        self.char_consistency_edit.setMaximumHeight(100)
+        self.char_consistency_edit.setMaximumHeight(80)  # 减小高度
         self.char_consistency_edit.setPlaceholderText("输入用于保持角色一致性的提示词...")
         
         consistency_layout.addWidget(self.char_consistency_edit)
@@ -191,9 +209,10 @@ class CharacterSceneDialog(QDialog):
         # 添加到分割器
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(left_widget)
-        splitter.addWidget(right_widget)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        splitter.addWidget(right_scroll)
+        splitter.setStretchFactor(0, 0)  # 左侧固定宽度
+        splitter.setStretchFactor(1, 1)  # 右侧占用剩余空间
+        splitter.setSizes([320, 580])    # 设置初始大小比例
         
         layout.addWidget(splitter)
         
@@ -226,16 +245,29 @@ class CharacterSceneDialog(QDialog):
         self.scene_table = QTableWidget()
         self.scene_table.setColumnCount(3)
         self.scene_table.setHorizontalHeaderLabels(["场景名称", "类型", "来源"])
-        self.scene_table.horizontalHeader().setStretchLastSection(True)
+        
+        # 设置列宽
+        header = self.scene_table.horizontalHeader()
+        header.setStretchLastSection(False)
+        self.scene_table.setColumnWidth(0, 100) # 场景名称列
+        self.scene_table.setColumnWidth(1, 60)  # 类型列
+        self.scene_table.setColumnWidth(2, 80)  # 来源列
+        header.setSectionResizeMode(0, QHeaderView.Stretch)  # 场景名称列可拉伸
+        
         self.scene_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.scene_table.itemSelectionChanged.connect(self.on_scene_selected)
         
         left_layout.addWidget(self.scene_table)
-        left_widget.setMaximumWidth(400)
+        left_widget.setMaximumWidth(320)  # 减小左侧宽度
         
-        # 右侧：场景详细信息编辑
+        # 右侧：场景详细信息编辑（添加滚动区域）
+        right_scroll = QScrollArea()
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
+        right_scroll.setWidget(right_widget)
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         
         # 场景基本信息
         basic_group = QGroupBox("基本信息")
@@ -245,7 +277,7 @@ class CharacterSceneDialog(QDialog):
         self.scene_category_combo = QComboBox()
         self.scene_category_combo.addItems(["", "室内", "室外", "特殊"])
         self.scene_description_edit = QTextEdit()
-        self.scene_description_edit.setMaximumHeight(80)
+        self.scene_description_edit.setMaximumHeight(60)  # 减小高度
         
         basic_layout.addRow("场景名称:", self.scene_name_edit)
         basic_layout.addRow("场景类型:", self.scene_category_combo)
@@ -292,7 +324,7 @@ class CharacterSceneDialog(QDialog):
         consistency_layout = QVBoxLayout(consistency_group)
         
         self.scene_consistency_edit = QTextEdit()
-        self.scene_consistency_edit.setMaximumHeight(100)
+        self.scene_consistency_edit.setMaximumHeight(80)  # 减小高度
         self.scene_consistency_edit.setPlaceholderText("输入用于保持场景一致性的提示词...")
         
         consistency_layout.addWidget(self.scene_consistency_edit)
@@ -314,9 +346,10 @@ class CharacterSceneDialog(QDialog):
         # 添加到分割器
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(left_widget)
-        splitter.addWidget(right_widget)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        splitter.addWidget(right_scroll)
+        splitter.setStretchFactor(0, 0)  # 左侧固定宽度
+        splitter.setStretchFactor(1, 1)  # 右侧占用剩余空间
+        splitter.setSizes([320, 580])    # 设置初始大小比例
         
         layout.addWidget(splitter)
         
@@ -388,15 +421,22 @@ class CharacterSceneDialog(QDialog):
         layout = QVBoxLayout(tab)
         
         # 说明
-        info_label = QLabel("从文本中自动提取角色和场景信息")
+        info_label = QLabel("从世界观圣经中自动提取角色和场景信息")
+        info_label.setStyleSheet("color: #2196F3; font-weight: bold;")
         layout.addWidget(info_label)
+        
+        # 提示信息
+        tip_label = QLabel("💡 系统已自动加载世界观圣经内容，您可以直接点击'开始提取'进行分析")
+        tip_label.setStyleSheet("color: #4CAF50; font-size: 12px; margin: 5px;")
+        tip_label.setWordWrap(True)
+        layout.addWidget(tip_label)
         
         # 文本输入区域
         text_group = QGroupBox("输入文本")
         text_layout = QVBoxLayout(text_group)
         
         self.extract_text_edit = QTextEdit()
-        self.extract_text_edit.setPlaceholderText("请输入要分析的文本内容...")
+        self.extract_text_edit.setPlaceholderText("世界观圣经内容将自动加载到这里，您也可以手动编辑或输入其他文本...")
         text_layout.addWidget(self.extract_text_edit)
         
         # 提取按钮
@@ -938,6 +978,75 @@ class CharacterSceneDialog(QDialog):
             error_msg = f"提取过程中发生错误: {str(e)}"
             self.extract_result_text.setText(error_msg)
             QMessageBox.critical(self, "错误", error_msg)
+    
+    def load_world_bible_content(self):
+        """加载世界观圣经内容到自动提取界面"""
+        try:
+            world_bible_text = None
+            
+            # 方法1：优先从项目特定的texts文件夹加载
+            try:
+                # 获取当前项目信息
+                if (hasattr(self.parent_window, 'project_manager') and 
+                    self.parent_window.project_manager and 
+                    self.parent_window.project_manager.current_project):
+                    
+                    project_name = self.parent_window.project_manager.current_project.get('name', '')
+                    if project_name:
+                        world_bible_file = os.path.join(os.getcwd(), "output", project_name, "texts", "world_bible.json")
+                        if os.path.exists(world_bible_file):
+                            import json
+                            with open(world_bible_file, 'r', encoding='utf-8') as f:
+                                world_bible_data = json.load(f)
+                                world_bible_text = world_bible_data.get("content", "")
+                            logger.info(f"从项目texts文件夹加载world_bible内容: {world_bible_file}")
+            except Exception as e:
+                logger.warning(f"从项目texts文件夹加载world_bible失败: {e}")
+            
+            # 方法2：从父窗口的_load_world_bible_from_file方法加载
+            if not world_bible_text and hasattr(self.parent_window, '_load_world_bible_from_file'):
+                world_bible_text = self.parent_window._load_world_bible_from_file()
+                if world_bible_text:
+                    logger.info("从父窗口_load_world_bible_from_file方法加载world_bible内容")
+            
+            # 方法3：从父窗口的stage_data获取
+            if not world_bible_text and (hasattr(self.parent_window, 'stage_data') and 
+                1 in self.parent_window.stage_data and 
+                'world_bible' in self.parent_window.stage_data[1]):
+                
+                world_bible_text = self.parent_window.stage_data[1]['world_bible']
+                logger.info("从父窗口stage_data获取world_bible内容")
+                    
+            # 方法4：从父窗口的world_bible_output组件获取
+            elif not world_bible_text and (hasattr(self.parent_window, 'world_bible_output') and 
+                  self.parent_window.world_bible_output.toPlainText()):
+                
+                world_bible_text = self.parent_window.world_bible_output.toPlainText()
+                logger.info("从父窗口world_bible_output获取内容")
+            
+            # 方法5：直接从项目文件读取
+            elif not world_bible_text and (hasattr(self.parent_window, 'project_manager') and 
+                  self.parent_window.project_manager and 
+                  self.parent_window.project_manager.current_project):
+                
+                project_data = self.parent_window.project_manager.current_project
+                if ('four_stage_storyboard' in project_data and 
+                    'stage_data' in project_data['four_stage_storyboard'] and 
+                    1 in project_data['four_stage_storyboard']['stage_data'] and 
+                    'world_bible' in project_data['four_stage_storyboard']['stage_data'][1]):
+                    
+                    world_bible_text = project_data['four_stage_storyboard']['stage_data'][1]['world_bible']
+                    logger.info("从项目文件直接读取world_bible内容")
+            
+            # 设置到文本编辑框
+            if world_bible_text and hasattr(self, 'extract_text_edit'):
+                self.extract_text_edit.setText(world_bible_text)
+                logger.info(f"已自动加载世界观圣经内容到自动提取界面，内容长度: {len(world_bible_text)}")
+            else:
+                logger.info("未找到世界观圣经内容或extract_text_edit组件不存在")
+                    
+        except Exception as e:
+            logger.warning(f"加载世界观圣经内容时出错: {e}")
     
     def apply_consistency(self):
         """应用一致性设置到分镜"""

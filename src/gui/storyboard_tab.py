@@ -18,7 +18,7 @@ from utils.config_manager import ConfigManager
 from gui.shots_window import ShotsWindow
 from gui.ui_components import ImageDelegate
 from gui.project_name_dialog import ProjectNameDialog
-from utils.project_manager import ProjectManager
+from utils.project_manager import StoryboardProjectManager
 
 
 class StoryboardTab(QWidget):
@@ -32,7 +32,7 @@ class StoryboardTab(QWidget):
         self.llm_api = None
         self.text_parser = None
         self.config_manager = ConfigManager()
-        self.project_manager = ProjectManager(self.config_manager.config_dir)
+        self.project_manager = StoryboardProjectManager(self.config_manager.config_dir)
         
         # 当前项目信息
         self.current_project_name = None

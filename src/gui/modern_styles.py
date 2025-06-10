@@ -87,7 +87,7 @@ class ModernThemes:
             # 状态颜色
             "hover": "#F5F5F5",             # 悬停
             "pressed": "#EEEEEE",           # 按下
-            "selected": "#E3F2FD",          # 选中
+            "selected": "#1976D2",          # 选中
             "focus": "#2196F3",             # 焦点
             "disabled": "#F5F5F5",          # 禁用
             
@@ -454,6 +454,9 @@ class StyleManager(QObject):
     def __init__(self):
         super().__init__()
         
+        # 缓存样式表 - 必须在其他初始化之前
+        self._style_cache: Dict[str, str] = {}
+        
         # 当前主题
         self.current_theme_type = ThemeType.LIGHT
         self.current_theme = ModernThemes.get_light_theme()
@@ -463,9 +466,6 @@ class StyleManager(QObject):
         
         # 加载保存的主题设置
         self.load_theme_settings()
-        
-        # 缓存样式表
-        self._style_cache: Dict[str, str] = {}
     
     def load_theme_settings(self):
         """加载主题设置"""
@@ -770,4 +770,4 @@ def apply_button_style(button: QPushButton, button_type: str = "primary"):
     
     # 刷新样式
     button.style().unpolish(button)
-    button.style().polish(button) 
+    button.style().polish(button)

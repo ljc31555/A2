@@ -365,6 +365,24 @@ class ProjectManager:
                         "path": None
                     }
         
+        # 检查五阶段分镜脚本状态
+        four_stage_data = self.current_project.get('four_stage_storyboard')
+        if four_stage_data:
+            stage_data = four_stage_data.get('stage_data', {})
+            current_stage = four_stage_data.get('current_stage', 1)
+            
+            # 检查各阶段完成情况
+            stage_status = {}
+            for stage in range(1, 6):
+                stage_status[f"stage_{stage}"] = bool(stage_data.get(stage))
+            
+            files_status["storyboard"] = {
+                "exists": current_stage >= 4 and bool(stage_data.get(4)),  # 第4阶段是分镜脚本
+                "path": "五阶段分镜脚本",
+                "stage_status": stage_status,
+                "current_stage": current_stage
+            }
+        
         return {
             "has_project": True,
             "project_name": self.current_project["name"],
@@ -431,4 +449,4 @@ class ProjectManager:
     def clear_current_project(self):
         """清空当前项目"""
         self.current_project = None
-        logger.info("当前项目已清空") 
+        logger.info("当前项目已清空")
