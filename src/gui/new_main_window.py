@@ -19,9 +19,9 @@ from PyQt5.QtWidgets import (
     QGroupBox, QScrollArea, QGridLayout, QSpacerItem, QSizePolicy,
     QSpinBox, QDoubleSpinBox, QCheckBox, QSlider, QFileDialog,
     QFrame, QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem,
-    QDialog, QDesktopWidget
+    QDialog, QDesktopWidget, QMenuBar, QMenu, QAction
 )
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QObject, QSize
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QObject, QSize, QDateTime
 from PyQt5.QtGui import QIcon, QPixmap, QFont, QPalette, QColor
 
 # 导入重构后的核心组件
@@ -30,10 +30,13 @@ from core.project_manager import ProjectManager
 from processors.text_processor import StoryboardResult
 from processors.image_processor import ImageGenerationConfig, BatchImageResult
 from processors.video_processor import VideoConfig
+from processors.consistency_enhanced_image_processor import ConsistencyEnhancedImageProcessor
 from utils.logger import logger
 from gui.storyboard_tab import StoryboardTab
-from gui.four_stage_storyboard_tab import FourStageStoryboardTab
+from .five_stage_storyboard_tab import FiveStageStoryboardTab
+from .consistency_control_panel import ConsistencyControlPanel
 from gui.project_dialog import NewProjectDialog, OpenProjectDialog
+from gui.log_dialog import LogDialog
 
 # 导入主题系统
 try:
@@ -121,6 +124,9 @@ class NewMainWindow(QMainWindow):
         # 初始化项目管理器
         self.project_manager = ProjectManager()
         
+        # 初始化一致性增强图像处理器（延迟初始化）
+        self.consistency_image_processor = None
+        
         # 当前项目名称
         self.current_project_name = None
         
@@ -175,6 +181,9 @@ class NewMainWindow(QMainWindow):
         # 创建主布局
         main_layout = QVBoxLayout(central_widget)
         
+        # 创建菜单栏
+        self.create_menu_bar()
+        
         # 创建工具栏
         self.create_toolbar(main_layout)
         
@@ -225,6 +234,81 @@ class NewMainWindow(QMainWindow):
         
         parent_layout.addWidget(toolbar_frame)
     
+    def create_menu_bar(self):
+        """创建菜单栏"""
+        menubar = self.menuBar()
+        
+        # 文件菜单
+        file_menu = menubar.addMenu("文件")
+        
+        new_project_action = QAction("新建项目", self)
+        new_project_action.setShortcut("Ctrl+N")
+        new_project_action.triggered.connect(self.new_project)
+        file_menu.addAction(new_project_action)
+        
+        open_project_action = QAction("打开项目", self)
+        open_project_action.setShortcut("Ctrl+O")
+        open_project_action.triggered.connect(self.open_project)
+        file_menu.addAction(open_project_action)
+        
+        file_menu.addSeparator()
+        
+        save_project_action = QAction("保存项目", self)
+        save_project_action.setShortcut("Ctrl+S")
+        save_project_action.triggered.connect(self.save_project)
+        file_menu.addAction(save_project_action)
+        
+        file_menu.addSeparator()
+        
+        exit_action = QAction("退出", self)
+        exit_action.setShortcut("Ctrl+Q")
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        # 工具菜单
+        tools_menu = menubar.addMenu("工具")
+        
+        # 日志管理子菜单
+        log_menu = tools_menu.addMenu("日志管理")
+        
+        view_log_action = QAction("查看系统日志", self)
+        view_log_action.triggered.connect(self.show_log_dialog)
+        log_menu.addAction(view_log_action)
+        
+        clear_log_action = QAction("清空日志", self)
+        clear_log_action.triggered.connect(self.clear_log)
+        log_menu.addAction(clear_log_action)
+        
+        export_log_action = QAction("导出日志", self)
+        export_log_action.triggered.connect(self.export_log)
+        log_menu.addAction(export_log_action)
+        
+        tools_menu.addSeparator()
+        
+        refresh_services_action = QAction("刷新服务", self)
+        refresh_services_action.triggered.connect(self.refresh_services)
+        tools_menu.addAction(refresh_services_action)
+        
+        # 视图菜单
+        view_menu = menubar.addMenu("视图")
+        
+        toggle_theme_action = QAction("切换主题", self)
+        toggle_theme_action.setShortcut("Ctrl+T")
+        toggle_theme_action.triggered.connect(self.toggle_theme)
+        view_menu.addAction(toggle_theme_action)
+        
+        # 帮助菜单
+        help_menu = menubar.addMenu("帮助")
+        
+        about_action = QAction("关于", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+        
+        help_action = QAction("使用帮助", self)
+        help_action.setShortcut("F1")
+        help_action.triggered.connect(self.show_help)
+        help_menu.addAction(help_action)
+    
     def create_tabs(self, parent_layout):
         """创建标签页"""
         self.tab_widget = QTabWidget()
@@ -238,12 +322,16 @@ class NewMainWindow(QMainWindow):
         self.tab_widget.addTab(self.storyboard_tab, "分镜生成")
         
         # 五阶段分镜生成标签页（新版）
-        self.four_stage_storyboard_tab = self.create_four_stage_storyboard_tab()
-        self.tab_widget.addTab(self.four_stage_storyboard_tab, "🎬 五阶段分镜")
+        self.five_stage_storyboard_tab = self.create_five_stage_storyboard_tab()
+        self.tab_widget.addTab(self.five_stage_storyboard_tab, "🎬 五阶段分镜")
         
         # 图像生成标签页
         self.image_tab = self.create_image_tab()
         self.tab_widget.addTab(self.image_tab, "图像生成")
+        
+        # 一致性控制标签页（延迟初始化处理器）
+        self.consistency_panel = ConsistencyControlPanel(None, self.project_manager, self)
+        self.tab_widget.addTab(self.consistency_panel, "🎨 一致性控制")
         
         # 视频生成标签页
         self.video_tab = self.create_video_tab()
@@ -335,10 +423,10 @@ class NewMainWindow(QMainWindow):
         # 使用重构后的StoryboardTab类
         return StoryboardTab(self)
     
-    def create_four_stage_storyboard_tab(self):
+    def create_five_stage_storyboard_tab(self):
         """创建五阶段分镜生成标签页"""
         # 使用新的五阶段分镜生成标签页
-        return FourStageStoryboardTab(self)
+        return FiveStageStoryboardTab(self)
     
     def create_image_tab(self):
         """创建图像生成标签页"""
@@ -526,6 +614,10 @@ class NewMainWindow(QMainWindow):
         self.clear_project_btn.clicked.connect(self.clear_project)
         project_buttons_layout.addWidget(self.clear_project_btn)
         
+        self.import_project_btn = QPushButton("导入项目")
+        self.import_project_btn.clicked.connect(self.import_project)
+        project_buttons_layout.addWidget(self.import_project_btn)
+        
         self.export_project_btn = QPushButton("导出项目")
         self.export_project_btn.clicked.connect(self.export_project)
         project_buttons_layout.addWidget(self.export_project_btn)
@@ -593,6 +685,7 @@ class NewMainWindow(QMainWindow):
         def on_init_finished():
             self.update_service_status()
             self.update_providers()
+            self._init_consistency_processor()
             self.status_label.setText("应用初始化完成")
         
         def on_init_error(error):
@@ -747,39 +840,50 @@ class NewMainWindow(QMainWindow):
                         # 加载项目
                         project_config = self.project_manager.load_project(selected_project["path"])
                         
-                        # 设置当前项目名称
-                        self.current_project_name = project_config.get('name', selected_project["path"])
+                        # 验证项目数据完整性
+                        self._validate_project_data(project_config)
+                        
+                        # 设置当前项目名称（兼容新旧格式）
+                        project_name = project_config.get('project_name') or project_config.get('name')
+                        self.current_project_name = project_name or selected_project["path"]
                         
                         # 清空当前内容
                         self.clear_all_content()
                         
+                        # 重新初始化一致性处理器（确保使用正确的项目目录）
+                        self._init_consistency_processor()
+                        
                         # 加载项目内容到界面
                         self.load_project_content(project_config)
                         
-                        # 加载五阶段分镜数据
-                        if hasattr(self, 'four_stage_storyboard_tab') and self.four_stage_storyboard_tab:
-                            self.four_stage_storyboard_tab.load_from_project()
+                        # 分阶段加载复杂组件数据
+                        self._load_complex_components(project_config)
                         
                         # 更新项目状态
                         self.update_project_status()
                         
                         # 更新窗口标题
-                        self.setWindowTitle(f"AI 视频生成系统 - {project_config['name']}")
+                        project_display_name = project_config.get('project_name') or project_config.get('name', '未知项目')
+                        self.setWindowTitle(f"AI 视频生成系统 - {project_display_name}")
                         
                         # 更新文本框占位符
                         self.update_text_placeholder()
                         
                         # 显示成功消息
-                        show_success(f"项目 '{project_config['name']}' 加载成功！")
+                        project_display_name = project_config.get('project_name') or project_config.get('name', '未知项目')
+                        show_success(f"项目 '{project_display_name}' 加载成功！")
                         
                         # 强制刷新界面
                         self.repaint()
                         
-                        logger.info(f"项目加载成功: {project_config['name']}")
+                        project_display_name = project_config.get('project_name') or project_config.get('name', '未知项目')
+                        logger.info(f"项目加载成功: {project_display_name}")
                         
                     except Exception as e:
                         QMessageBox.critical(self, "错误", f"加载项目失败：{e}")
                         logger.error(f"加载项目失败: {e}")
+                        import traceback
+                        logger.error(f"详细错误信息: {traceback.format_exc()}")
                         
         except Exception as e:
             QMessageBox.critical(self, "错误", f"打开项目失败：{e}")
@@ -1008,7 +1112,8 @@ class NewMainWindow(QMainWindow):
         """更新文本框占位符"""
         try:
             if self.project_manager.current_project:
-                project_name = self.project_manager.current_project.get("name", "当前项目")
+                # 兼容新旧项目格式
+                project_name = self.project_manager.current_project.get("project_name") or self.project_manager.current_project.get("name", "当前项目")
                 placeholder = f"项目：{project_name}\n请输入要转换为视频的文本内容..."
             else:
                 placeholder = "请先创建项目，然后输入要转换为视频的文本内容..."
@@ -1044,6 +1149,12 @@ class NewMainWindow(QMainWindow):
             rewritten_text = self.rewritten_text.toPlainText().strip()
             if rewritten_text:
                 self.project_manager.save_text_content(rewritten_text, "rewritten_text")
+            
+            # 触发一致性面板保存预览数据
+            if hasattr(self, 'consistency_panel') and self.consistency_panel:
+                current_preview = self.consistency_panel.preview_text.toPlainText().strip()
+                if current_preview:
+                    self.consistency_panel._save_preview_data(current_preview)
             
             logger.info("当前内容已保存到项目")
             
@@ -1188,7 +1299,12 @@ class NewMainWindow(QMainWindow):
             self.show_progress(progress, message)
         
         # 准备配置
-        style = self.storyboard_tab.style_combo.currentText() if hasattr(self, 'storyboard_tab') and hasattr(self.storyboard_tab, 'style_combo') else "电影风格"
+        if hasattr(self, 'storyboard_tab') and hasattr(self.storyboard_tab, 'style_combo'):
+            style = self.storyboard_tab.style_combo.currentText()
+        else:
+            from utils.config_manager import ConfigManager
+            config_manager = ConfigManager()
+            style = config_manager.get_setting("default_style", "电影风格")
         providers = {
             "llm": self.storyboard_tab.rewrite_provider_combo.currentText() if hasattr(self, 'storyboard_tab') and hasattr(self.storyboard_tab, 'rewrite_provider_combo') and self.storyboard_tab.rewrite_provider_combo.currentText() != "自动选择" else None,
             "image": self.image_provider_combo.currentText() if self.image_provider_combo.currentText() else None
@@ -1239,7 +1355,12 @@ class NewMainWindow(QMainWindow):
         def on_progress(progress, message):
             self.show_progress(progress, message)
         
-        style = self.storyboard_tab.style_combo.currentText() if hasattr(self, 'storyboard_tab') and hasattr(self.storyboard_tab, 'style_combo') else "电影风格"
+        if hasattr(self, 'storyboard_tab') and hasattr(self.storyboard_tab, 'style_combo'):
+            style = self.storyboard_tab.style_combo.currentText()
+        else:
+            from utils.config_manager import ConfigManager
+            config_manager = ConfigManager()
+            style = config_manager.get_setting("default_style", "电影风格")
         provider = self.storyboard_tab.rewrite_provider_combo.currentText() if hasattr(self, 'storyboard_tab') and hasattr(self.storyboard_tab, 'rewrite_provider_combo') and self.storyboard_tab.rewrite_provider_combo.currentText() != "自动选择" else None
         
         self.current_worker = AsyncWorker(
@@ -1474,17 +1595,56 @@ class NewMainWindow(QMainWindow):
     
     def export_project(self):
         """导出项目"""
+        if not self.project_manager or not self.project_manager.current_project:
+            QMessageBox.warning(self, "导出失败", "没有当前项目可以导出")
+            return
+            
         file_path, _ = QFileDialog.getSaveFileName(self, "导出项目", "", "JSON文件 (*.json)")
         if file_path:
             try:
-                project_data = self.app_controller.export_project()
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(project_data)
-                
-                self.status_label.setText(f"项目已导出: {file_path}")
+                # 直接使用project_manager的导出方法
+                export_data = self.project_manager.export_project(file_path)
+                if export_data:
+                    self.status_label.setText(f"项目已导出: {file_path}")
+                    QMessageBox.information(self, "导出成功", f"项目已成功导出到:\n{file_path}")
+                else:
+                    QMessageBox.critical(self, "导出失败", "导出项目时发生错误")
                 
             except Exception as e:
                 QMessageBox.critical(self, "导出失败", f"无法导出项目:\n{e}")
+    
+    def import_project(self):
+        """导入项目"""
+        file_path, _ = QFileDialog.getOpenFileName(self, "导入项目", "", "JSON文件 (*.json)")
+        if file_path:
+            try:
+                # 使用project_manager的导入方法
+                success = self.project_manager.import_project(file_path)
+                if success:
+                    # 导入成功后刷新界面
+                    self.status_label.setText(f"项目已导入: {file_path}")
+                    QMessageBox.information(self, "导入成功", f"项目已成功导入:\n{file_path}")
+                    
+                    # 刷新项目状态和界面
+                    self.update_project_status()
+                    
+                    # 如果有五阶段标签页，尝试加载数据
+                    if hasattr(self, 'five_stage_tab'):
+                        # 使用延迟加载确保UI组件已完全初始化
+                        if hasattr(self.five_stage_tab, 'delayed_load_from_project'):
+                            self.five_stage_tab.delayed_load_from_project()
+                        else:
+                            self.five_stage_tab.load_from_project()
+                    
+                    # 如果有分镜标签页，尝试加载数据
+                    if hasattr(self, 'storyboard_tab') and hasattr(self.storyboard_tab, 'load_from_project'):
+                        self.storyboard_tab.load_from_project()
+                        
+                else:
+                    QMessageBox.critical(self, "导入失败", "导入项目时发生错误")
+                    
+            except Exception as e:
+                QMessageBox.critical(self, "导入失败", f"无法导入项目:\n{e}")
     
     def config_apis(self):
         """配置API"""
@@ -1531,7 +1691,7 @@ class NewMainWindow(QMainWindow):
                             "stage_1": "  └ 世界观圣经",
                             "stage_2": "  └ 角色管理", 
                             "stage_3": "  └ 场景分割",
-                            "stage_4": "  └ 分镜脚本",
+                            "stage_4": "  └ 分镜脚本",  # 第4阶段：分镜脚本生成
                             "stage_5": "  └ 优化预览"
                         }
                         
@@ -1668,6 +1828,305 @@ class NewMainWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
+    
+    def show_log_dialog(self):
+        """显示日志对话框"""
+        try:
+            log_dialog = LogDialog(self)
+            log_dialog.exec_()
+        except Exception as e:
+            logger.error(f"显示日志对话框失败: {e}")
+            QMessageBox.warning(self, "错误", f"无法显示日志对话框: {e}")
+    
+    def clear_log(self):
+        """清空日志文件"""
+        reply = QMessageBox.question(
+            self, "确认清空", 
+            "确定要清空系统日志吗？此操作不可撤销。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                # 获取日志文件路径
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                log_file_path = os.path.join(project_root, "logs", "system.log")
+                
+                if os.path.exists(log_file_path):
+                    # 清空日志文件
+                    with open(log_file_path, 'w', encoding='utf-8') as f:
+                        f.write("")
+                    
+                    logger.info("系统日志已被用户清空")
+                    QMessageBox.information(self, "成功", "日志已清空")
+                else:
+                    QMessageBox.information(self, "提示", "日志文件不存在")
+                    
+            except Exception as e:
+                logger.error(f"清空日志失败: {e}")
+                QMessageBox.warning(self, "错误", f"清空日志失败: {e}")
+    
+    def export_log(self):
+        """导出日志文件"""
+        try:
+            # 获取日志文件路径
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            log_file_path = os.path.join(project_root, "logs", "system.log")
+            
+            if not os.path.exists(log_file_path):
+                QMessageBox.information(self, "提示", "日志文件不存在")
+                return
+            
+            # 选择保存位置
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "导出日志文件",
+                f"system_log_{QDateTime.currentDateTime().toString('yyyyMMdd_hhmmss')}.log",
+                "日志文件 (*.log);;文本文件 (*.txt);;所有文件 (*.*)"
+            )
+            
+            if save_path:
+                # 复制日志文件
+                import shutil
+                shutil.copy2(log_file_path, save_path)
+                
+                logger.info(f"日志已导出到: {save_path}")
+                QMessageBox.information(self, "成功", f"日志已导出到:\n{save_path}")
+                
+        except Exception as e:
+            logger.error(f"导出日志失败: {e}")
+            QMessageBox.warning(self, "错误", f"导出日志失败: {e}")
+    
+    def show_about(self):
+        """显示关于对话框"""
+        about_text = """
+        <h2>AI 视频生成系统</h2>
+        <p><b>版本:</b> 2.0</p>
+        <p><b>描述:</b> 基于AI技术的智能视频生成系统</p>
+        <p><b>功能特性:</b></p>
+        <ul>
+            <li>智能文本处理与改写</li>
+            <li>自动分镜生成</li>
+            <li>AI图像生成</li>
+            <li>视频合成与处理</li>
+            <li>项目管理</li>
+            <li>日志管理</li>
+        </ul>
+        <p><b>技术栈:</b> Python, PyQt5, ComfyUI, 大语言模型</p>
+        """
+        
+        QMessageBox.about(self, "关于 AI 视频生成系统", about_text)
+    
+    def show_help(self):
+        """显示帮助信息"""
+        help_text = """
+        <h2>使用帮助</h2>
+        
+        <h3>快速开始:</h3>
+        <ol>
+            <li>点击"新建项目"创建一个新项目</li>
+            <li>在"文本处理"标签页输入要转换的文本</li>
+            <li>使用"分镜生成"功能生成分镜脚本</li>
+            <li>在"图像生成"标签页生成对应图像</li>
+            <li>最后在"视频生成"标签页合成视频</li>
+        </ol>
+        
+        <h3>快捷键:</h3>
+        <ul>
+            <li><b>Ctrl+N:</b> 新建项目</li>
+            <li><b>Ctrl+O:</b> 打开项目</li>
+            <li><b>Ctrl+S:</b> 保存项目</li>
+            <li><b>Ctrl+T:</b> 切换主题</li>
+            <li><b>Ctrl+Q:</b> 退出程序</li>
+            <li><b>F1:</b> 显示帮助</li>
+        </ul>
+        
+        <h3>日志管理:</h3>
+        <p>通过"工具" -> "日志管理"菜单可以:</p>
+        <ul>
+            <li>查看系统运行日志</li>
+            <li>清空历史日志</li>
+            <li>导出日志文件</li>
+        </ul>
+        """
+        
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("使用帮助")
+        msg_box.setText(help_text)
+        msg_box.setTextFormat(Qt.RichText)
+        msg_box.exec_()
+    
+    def _validate_project_data(self, project_config):
+        """验证项目数据完整性"""
+        try:
+            # 检查必要的项目字段
+            required_fields = ['name', 'project_dir', 'files']
+            for field in required_fields:
+                if field not in project_config:
+                    logger.warning(f"项目配置缺少必要字段: {field}")
+                    if field == 'files':
+                        project_config['files'] = {}
+            
+            # 验证项目目录是否存在
+            project_dir = Path(project_config.get('project_dir', ''))
+            if not project_dir.exists():
+                raise FileNotFoundError(f"项目目录不存在: {project_dir}")
+            
+            # 验证文件路径
+            files = project_config.get('files', {})
+            for file_type, file_path in files.items():
+                if file_type == 'images' and isinstance(file_path, list):
+                    # 验证图像文件列表
+                    valid_images = []
+                    for img_path in file_path:
+                        if Path(img_path).exists():
+                            valid_images.append(img_path)
+                        else:
+                            logger.warning(f"图像文件不存在: {img_path}")
+                    files['images'] = valid_images
+                elif file_path and not isinstance(file_path, list):
+                    # 验证单个文件
+                    if not Path(file_path).exists():
+                        logger.warning(f"文件不存在: {file_path}")
+                        files[file_type] = None
+            
+            logger.info("项目数据验证完成")
+            
+        except Exception as e:
+            logger.error(f"项目数据验证失败: {e}")
+            raise
+    
+    def _load_complex_components(self, project_config):
+        """分阶段加载复杂组件数据"""
+        try:
+            # 第一阶段：加载五阶段分镜数据
+            if hasattr(self, 'five_stage_storyboard_tab') and self.five_stage_storyboard_tab:
+                logger.info("开始加载五阶段分镜数据...")
+                # 使用多次延迟确保UI完全初始化
+                QTimer.singleShot(100, lambda: self._load_five_stage_data(project_config))
+            
+            # 第二阶段：更新一致性控制面板
+            QTimer.singleShot(300, self._update_consistency_after_load)
+            
+            # 第三阶段：验证数据完整性
+            QTimer.singleShot(500, self._verify_load_completion)
+            
+        except Exception as e:
+            logger.error(f"加载复杂组件数据失败: {e}")
+    
+    def _load_five_stage_data(self, project_config):
+        """加载五阶段分镜数据"""
+        try:
+            if hasattr(self, 'five_stage_storyboard_tab') and self.five_stage_storyboard_tab:
+                # 检查项目中是否有五阶段数据
+                if 'five_stage_storyboard' in project_config:
+                    logger.info("发现五阶段分镜数据，开始加载...")
+                    self.five_stage_storyboard_tab.delayed_load_from_project()
+                else:
+                    logger.info("项目中没有五阶段分镜数据")
+        except Exception as e:
+            logger.error(f"加载五阶段分镜数据失败: {e}")
+    
+    def _update_consistency_after_load(self):
+        """项目加载后更新一致性控制面板"""
+        try:
+            # 确保一致性处理器已正确初始化
+            if hasattr(self, 'consistency_panel') and self.consistency_panel:
+                # 强制重新加载角色场景数据（不检查cs_manager状态）
+                self.consistency_panel.load_character_scene_data()
+                
+                # 如果有五阶段数据，传递给一致性面板
+                if hasattr(self, 'five_stage_storyboard_tab') and self.five_stage_storyboard_tab:
+                    self.five_stage_storyboard_tab._update_consistency_panel()
+                
+                logger.info("一致性控制面板数据更新完成")
+        except Exception as e:
+            logger.error(f"更新一致性控制面板失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    def _verify_load_completion(self):
+        """验证项目加载完成情况"""
+        try:
+            # 兼容新旧项目格式
+            project_name = self.project_manager.current_project.get('project_name') or self.project_manager.current_project.get('name', 'Unknown')
+            
+            # 检查各组件加载状态
+            load_status = {
+                '文本内容': bool(self.text_input.toPlainText()),
+                '改写文本': bool(self.rewritten_text.toPlainText()),
+                '图像列表': self.image_list.count() > 0,
+                '五阶段数据': False,
+                '一致性面板': False
+            }
+            
+            # 检查五阶段数据
+            if hasattr(self, 'five_stage_storyboard_tab') and self.five_stage_storyboard_tab:
+                if hasattr(self.five_stage_storyboard_tab, 'stage_data') and self.five_stage_storyboard_tab.stage_data:
+                    load_status['五阶段数据'] = any(self.five_stage_storyboard_tab.stage_data.values())
+            
+            # 检查一致性面板
+            if hasattr(self, 'consistency_panel') and self.consistency_panel:
+                if hasattr(self.consistency_panel, 'cs_manager') and self.consistency_panel.cs_manager:
+                    characters = self.consistency_panel.cs_manager.get_all_characters()
+                    scenes = self.consistency_panel.cs_manager.get_all_scenes()
+                    load_status['一致性面板'] = len(characters) > 0 or len(scenes) > 0
+            
+            # 记录加载状态
+            logger.info(f"项目 '{project_name}' 加载状态: {load_status}")
+            
+            # 统计成功加载的组件
+            loaded_count = sum(1 for status in load_status.values() if status)
+            total_count = len(load_status)
+            
+            if loaded_count == total_count:
+                logger.info(f"项目 '{project_name}' 所有组件加载完成")
+            else:
+                logger.warning(f"项目 '{project_name}' 部分组件未加载: {loaded_count}/{total_count}")
+                
+        except Exception as e:
+            logger.error(f"验证项目加载完成情况失败: {e}")
+    
+    def _init_consistency_processor(self):
+        """初始化一致性增强图像处理器"""
+        try:
+            from utils.character_scene_manager import CharacterSceneManager
+            
+            # 获取当前项目目录
+            project_dir = None
+            if self.project_manager.current_project:
+                project_dir = self.project_manager.current_project.get("project_dir")
+            
+            if project_dir:
+                # 只有在有项目时才创建角色场景管理器
+                character_scene_manager = CharacterSceneManager(project_dir, self.app_controller.service_manager)
+                
+                # 初始化一致性增强图像处理器
+                self.consistency_image_processor = ConsistencyEnhancedImageProcessor(
+                    self.app_controller.service_manager,
+                    character_scene_manager
+                )
+                
+                # 如果一致性控制面板已经创建，更新其处理器和管理器引用
+                if hasattr(self, 'consistency_panel') and self.consistency_panel:
+                    self.consistency_panel.image_processor = self.consistency_image_processor
+                    self.consistency_panel.cs_manager = character_scene_manager
+                    logger.info("一致性控制面板引用已更新")
+                
+                logger.info("一致性增强图像处理器初始化完成")
+            else:
+                # 没有项目时，不创建角色场景管理器，避免在output目录生成文件
+                self.consistency_image_processor = None
+                if hasattr(self, 'consistency_panel') and self.consistency_panel:
+                    self.consistency_panel.image_processor = None
+                    self.consistency_panel.cs_manager = None
+                logger.info("未加载项目，跳过一致性增强图像处理器初始化")
+            
+        except Exception as e:
+            logger.error(f"初始化一致性增强图像处理器失败: {e}")
+            # 创建一个空的处理器作为备用
+            self.consistency_image_processor = None
 
 # 移除main函数，避免与主程序冲突
 # def main():

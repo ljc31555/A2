@@ -247,20 +247,108 @@ class LLMService(ServiceBase):
                     error_text = await response.text()
                     raise Exception(f"API请求失败 (状态码: {response.status}): {error_text}")
     
-    async def generate_storyboard(self, text: str, style: str = "电影风格", provider: str = None) -> ServiceResult:
-        """生成分镜表格"""
-        prompt = self.prompt_templates['storyboard_generation'].format(
-            text=text,
-            style=style
-        )
-        
-        return await self.execute(
-            provider=provider,
-            prompt=prompt,
-            max_tokens=3000,
-            temperature=0.7
-        )
+    async def generate_storyboard(self, text: str, style: str = None, provider: str = None) -> ServiceResult:
+        """生成分镜脚本"""
+        try:
+            # 如果没有指定风格，从配置中获取默认风格
+            if style is None:
+                from utils.config_manager import ConfigManager
+                config_manager = ConfigManager()
+                style = config_manager.get_setting("default_style", "电影风格")
+            
+            # 选择提供商
+            if not provider:
+                provider = self._get_default_provider()
+            
+            # 构建提示词
+            prompt = f"""请根据以下文本生成{style}的分镜脚本：
+
+{text}
+
+请按照以下格式输出分镜信息：
+镜头1：[场景描述]
+镜头2：[场景描述]
+...
+
+每个镜头应该包含：
+- 场景设置
+- 角色动作
+- 镜头角度
+- 情感氛围"""
+            
+            # 调用LLM API
+            result = await self._call_llm_api(provider, prompt)
+            
+            if result.success:
+                return ServiceResult(
+                    success=True,
+                    data={
+                        "storyboard": result.data,
+                        "style": style,
+                        "provider": provider
+                    },
+                    message="分镜脚本生成成功"
+                )
+            else:
+                return result
+                
+        except Exception as e:
+            logger.error(f"生成分镜脚本失败: {e}")
+            return ServiceResult(
+                success=False,
+                error=str(e),
+                message="分镜脚本生成失败"
+            )
     
+    async def optimize_prompt(self, prompt: str, style: str = None, provider: str = None) -> ServiceResult:
+        """优化提示词"""
+        try:
+            # 如果没有指定风格，从配置中获取默认风格
+            if style is None:
+                from utils.config_manager import ConfigManager
+                config_manager = ConfigManager()
+                style = config_manager.get_setting("default_style", "写实风格")
+            
+            # 选择提供商
+            if not provider:
+                provider = self._get_default_provider()
+            
+            # 构建优化提示词
+            optimization_prompt = f"""请优化以下{style}的图像生成提示词，使其更加详细和准确：
+
+原始提示词：{prompt}
+
+请提供优化后的提示词，包含：
+- 更详细的视觉描述
+- 适合{style}的关键词
+- 技术参数建议
+- 构图和光影描述"""
+            
+            # 调用LLM API
+            result = await self._call_llm_api(provider, optimization_prompt)
+            
+            if result.success:
+                return ServiceResult(
+                    success=True,
+                    data={
+                        "optimized_prompt": result.data,
+                        "original_prompt": prompt,
+                        "style": style,
+                        "provider": provider
+                    },
+                    message="提示词优化成功"
+                )
+            else:
+                return result
+                
+        except Exception as e:
+            logger.error(f"优化提示词失败: {e}")
+            return ServiceResult(
+                success=False,
+                error=str(e),
+                message="提示词优化失败"
+            )
+
     async def rewrite_text(self, text: str, provider: str = None) -> ServiceResult:
         """改写文本"""
         prompt = self.prompt_templates['text_rewrite'].format(text=text)

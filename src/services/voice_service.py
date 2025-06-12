@@ -371,15 +371,30 @@ class VoiceService(ServiceBase):
             **kwargs
         )
     
-    async def speech_to_text(self, audio_data: bytes, language: str = "zh-CN", provider: str = None, **kwargs) -> ServiceResult:
-        """语音转文本"""
-        return await self.execute(
-            provider=provider,
-            task_type='stt',
-            audio_data=audio_data,
-            language=language,
-            **kwargs
-        )
+    async def speech_to_text(self, audio_data: bytes, language: str = None, provider: str = None, **kwargs) -> ServiceResult:
+        """语音转文字"""
+        try:
+            # 如果没有指定语言，从配置中获取默认语言
+            if language is None:
+                from utils.config_manager import ConfigManager
+                config_manager = ConfigManager()
+                language = config_manager.get_setting("default_language", "zh-CN")
+            
+            return await self.execute(
+                provider=provider,
+                task_type='stt',
+                audio_data=audio_data,
+                language=language,
+                **kwargs
+            )
+                
+        except Exception as e:
+            logger.error(f"语音转文字失败: {e}")
+            return ServiceResult(
+                success=False,
+                error=str(e),
+                message="语音转文字失败"
+            )
     
     async def batch_text_to_speech(self, texts: List[str], voice: str = "中文女声", 
                                  provider: str = None, **kwargs) -> List[ServiceResult]:

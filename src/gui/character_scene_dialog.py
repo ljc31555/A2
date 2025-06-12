@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QTableWidget, QTableWidgetItem, QPushButton, QLabel,
@@ -493,7 +494,21 @@ class CharacterSceneDialog(QDialog):
         
         self.scene_table.setRowCount(len(scenes))
         
-        for row, (scene_id, scene_data) in enumerate(scenes.items()):
+        # 对场景进行自然排序，确保场景1、场景2、场景3、场景4等按正确顺序显示
+        import re
+        def natural_sort_key(item):
+            scene_id, scene_data = item
+            scene_name = scene_data.get('name', '')
+            # 提取场景名称中的数字进行排序
+            numbers = re.findall(r'\d+', scene_name)
+            if numbers:
+                return (0, int(numbers[0]), scene_name)  # 优先按数字排序
+            else:
+                return (1, 0, scene_name)  # 非数字场景排在后面
+        
+        sorted_scenes = sorted(scenes.items(), key=natural_sort_key)
+        
+        for row, (scene_id, scene_data) in enumerate(sorted_scenes):
             # 场景名称
             name_item = QTableWidgetItem(scene_data.get('name', ''))
             name_item.setData(Qt.UserRole, scene_id)
@@ -534,7 +549,20 @@ class CharacterSceneDialog(QDialog):
         scenes = self.character_scene_manager.get_all_scenes()
         self.scene_selection_table.setRowCount(len(scenes))
         
-        for row, (scene_id, scene_data) in enumerate(scenes.items()):
+        # 对场景进行自然排序，确保场景1、场景2、场景3、场景4等按正确顺序显示
+        def natural_sort_key_selection(item):
+            scene_id, scene_data = item
+            scene_name = scene_data.get('name', '')
+            # 提取场景名称中的数字进行排序
+            numbers = re.findall(r'\d+', scene_name)
+            if numbers:
+                return (0, int(numbers[0]), scene_name)  # 优先按数字排序
+            else:
+                return (1, 0, scene_name)  # 非数字场景排在后面
+        
+        sorted_scenes_selection = sorted(scenes.items(), key=natural_sort_key_selection)
+        
+        for row, (scene_id, scene_data) in enumerate(sorted_scenes_selection):
             # 复选框
             checkbox = QCheckBox()
             self.scene_selection_table.setCellWidget(row, 0, checkbox)
@@ -662,7 +690,7 @@ class CharacterSceneDialog(QDialog):
     
     def add_scene(self):
         """添加新场景"""
-        scene_id = f"manual_{self.character_scene_manager._get_current_time().replace(':', '_')}"
+        scene_id = f"分镜场景_手动添加_{self.character_scene_manager._get_current_time().replace(':', '_')}"
         scene_data = {
             "name": "新场景",
             "category": "",
@@ -983,60 +1011,60 @@ class CharacterSceneDialog(QDialog):
         """加载世界观圣经内容到自动提取界面"""
         try:
             world_bible_text = None
-            
-            # 方法1：优先从项目特定的texts文件夹加载
-            try:
-                # 获取当前项目信息
-                if (hasattr(self.parent_window, 'project_manager') and 
-                    self.parent_window.project_manager and 
+            logger.info("开始加载世界观圣经内容...")
+
+            # 方法1 (原方法5)：优先直接从项目文件读取 project.json
+            if (hasattr(self.parent_window, 'project_manager') and
+                    self.parent_window.project_manager and
                     self.parent_window.project_manager.current_project):
-                    
-                    project_name = self.parent_window.project_manager.current_project.get('name', '')
-                    if project_name:
-                        world_bible_file = os.path.join(os.getcwd(), "output", project_name, "texts", "world_bible.json")
-                        if os.path.exists(world_bible_file):
-                            import json
-                            with open(world_bible_file, 'r', encoding='utf-8') as f:
-                                world_bible_data = json.load(f)
-                                world_bible_text = world_bible_data.get("content", "")
-                            logger.info(f"从项目texts文件夹加载world_bible内容: {world_bible_file}")
-            except Exception as e:
-                logger.warning(f"从项目texts文件夹加载world_bible失败: {e}")
-            
-            # 方法2：从父窗口的_load_world_bible_from_file方法加载
-            if not world_bible_text and hasattr(self.parent_window, '_load_world_bible_from_file'):
-                world_bible_text = self.parent_window._load_world_bible_from_file()
-                if world_bible_text:
-                    logger.info("从父窗口_load_world_bible_from_file方法加载world_bible内容")
-            
-            # 方法3：从父窗口的stage_data获取
-            if not world_bible_text and (hasattr(self.parent_window, 'stage_data') and 
-                1 in self.parent_window.stage_data and 
-                'world_bible' in self.parent_window.stage_data[1]):
+                project_data = self.parent_window.project_manager.current_project
+                logger.info(f"项目数据包含的键: {list(project_data.keys())}")
                 
-                world_bible_text = self.parent_window.stage_data[1]['world_bible']
-                logger.info("从父窗口stage_data获取world_bible内容")
+                if 'five_stage_storyboard' in project_data:
+                    five_stage_data = project_data['five_stage_storyboard']
+                    logger.info(f"五阶段数据包含的键: {list(five_stage_data.keys())}")
                     
-            # 方法4：从父窗口的world_bible_output组件获取
-            elif not world_bible_text and (hasattr(self.parent_window, 'world_bible_output') and 
+                    if 'stage_data' in five_stage_data:
+                        stage_data = five_stage_data['stage_data']
+                        logger.info(f"阶段数据包含的键: {list(stage_data.keys())}")
+                        
+                        if '1' in stage_data:
+                            stage1_data = stage_data['1']
+                            logger.info(f"阶段1数据包含的键: {list(stage1_data.keys()) if isinstance(stage1_data, dict) else '非字典类型'}")
+                            
+                            if 'world_bible' in stage1_data:
+                                world_bible_text = stage1_data['world_bible']
+                                if world_bible_text:
+                                    logger.info(f"从项目文件 project.json 直接读取world_bible内容，长度: {len(world_bible_text)}")
+                                else:
+                                    logger.info("项目文件中world_bible字段存在但内容为空")
+                            else:
+                                logger.info("阶段1数据中未找到world_bible字段")
+                        else:
+                            logger.info("阶段数据中未找到阶段1")
+                    else:
+                        logger.info("五阶段数据中未找到stage_data字段")
+                else:
+                    logger.info("项目数据中未找到five_stage_storyboard字段")
+            else:
+                logger.info("未找到项目管理器或当前项目")
+
+            # 方法2：从父窗口的stage_data获取
+            if not world_bible_text and (hasattr(self.parent_window, 'stage_data') and 
+                '1' in self.parent_window.stage_data and 
+                'world_bible' in self.parent_window.stage_data['1']):
+                
+                world_bible_text = self.parent_window.stage_data['1']['world_bible']
+                if world_bible_text:
+                    logger.info("从父窗口stage_data获取world_bible内容")
+                    
+            # 方法3：从父窗口的world_bible_output组件获取
+            if not world_bible_text and (hasattr(self.parent_window, 'world_bible_output') and 
                   self.parent_window.world_bible_output.toPlainText()):
                 
                 world_bible_text = self.parent_window.world_bible_output.toPlainText()
-                logger.info("从父窗口world_bible_output获取内容")
-            
-            # 方法5：直接从项目文件读取
-            elif not world_bible_text and (hasattr(self.parent_window, 'project_manager') and 
-                  self.parent_window.project_manager and 
-                  self.parent_window.project_manager.current_project):
-                
-                project_data = self.parent_window.project_manager.current_project
-                if ('four_stage_storyboard' in project_data and 
-                    'stage_data' in project_data['four_stage_storyboard'] and 
-                    1 in project_data['four_stage_storyboard']['stage_data'] and 
-                    'world_bible' in project_data['four_stage_storyboard']['stage_data'][1]):
-                    
-                    world_bible_text = project_data['four_stage_storyboard']['stage_data'][1]['world_bible']
-                    logger.info("从项目文件直接读取world_bible内容")
+                if world_bible_text:
+                    logger.info("从父窗口world_bible_output获取内容")
             
             # 设置到文本编辑框
             if world_bible_text and hasattr(self, 'extract_text_edit'):

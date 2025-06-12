@@ -218,8 +218,14 @@ class ServiceManager:
             **params
         )
     
-    def create_video_generation_workflow(self, text: str, style: str = "电影风格") -> str:
+    def create_video_generation_workflow(self, text: str, style: str = None) -> str:
         """创建视频生成工作流"""
+        # 如果没有指定风格，从配置中获取默认风格
+        if style is None:
+            from utils.config_manager import ConfigManager
+            config_manager = ConfigManager()
+            style = config_manager.get_setting("default_style", "电影风格")
+        
         workflow_name = f"video_generation_{int(asyncio.get_event_loop().time())}"
         
         steps = [
@@ -359,8 +365,14 @@ class ServiceManager:
         logger.info("服务管理器已关闭")
     
     # 便捷方法
-    async def generate_storyboard(self, text: str, style: str = "电影风格", provider: str = None) -> ServiceResult:
+    async def generate_storyboard(self, text: str, style: str = None, provider: str = None) -> ServiceResult:
         """生成分镜（便捷方法）"""
+        # 如果没有指定风格，从配置中获取默认风格
+        if style is None:
+            from utils.config_manager import ConfigManager
+            config_manager = ConfigManager()
+            style = config_manager.get_setting("default_style", "电影风格")
+        
         return await self.execute_service_method(
             ServiceType.LLM, "generate_storyboard",
             text=text, style=style, provider=provider

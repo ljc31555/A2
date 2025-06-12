@@ -581,6 +581,9 @@ class CharacterSceneManager:
             Dict: 提取结果统计
         """
         try:
+            # 清除之前自动提取的角色和场景（替换而不是追加）
+            self._clear_auto_extracted_data()
+            
             # 提取角色
             extracted_characters = self.extract_characters_from_text(text)
             character_count = 0
@@ -593,7 +596,7 @@ class CharacterSceneManager:
             extracted_scenes = self.extract_scenes_from_text(text)
             scene_count = 0
             for scene in extracted_scenes:
-                scene_id = f"auto_{scene['name']}_{self._get_current_time().replace(':', '_')}"
+                scene_id = f"镜头场景_{scene['name']}_{self._get_current_time().replace(':', '_')}"
                 self.save_scene(scene_id, scene)
                 scene_count += 1
             
@@ -601,10 +604,10 @@ class CharacterSceneManager:
                 "success": True,
                 "characters_extracted": character_count,
                 "scenes_extracted": scene_count,
-                "message": f"成功提取 {character_count} 个角色和 {scene_count} 个场景"
+                "message": f"成功替换提取 {character_count} 个角色和 {scene_count} 个场景"
             }
             
-            logger.info(f"自动提取完成: {result['message']}")
+            logger.info(f"自动提取完成（替换模式）: {result['message']}")
             return result
             
         except Exception as e:
@@ -615,10 +618,45 @@ class CharacterSceneManager:
                 "message": "自动提取失败"
             }
     
+    def _clear_auto_extracted_data(self):
+        """清除之前自动提取的角色和场景数据"""
+        try:
+            # 清除自动提取的角色（ID以"auto_"开头的）
+            characters_db = self._load_json(self.characters_file)
+            characters = characters_db.get("characters", {})
+            auto_character_ids = [char_id for char_id in characters.keys() if char_id.startswith("auto_")]
+            
+            for char_id in auto_character_ids:
+                del characters[char_id]
+                logger.info(f"已清除自动提取的角色: {char_id}")
+            
+            if auto_character_ids:
+                characters_db["last_updated"] = self._get_current_time()
+                self._save_json(self.characters_file, characters_db)
+            
+            # 清除自动提取的场景（ID以"镜头场景_"开头的）
+            scenes_db = self._load_json(self.scenes_file)
+            scenes = scenes_db.get("scenes", {})
+            auto_scene_ids = [scene_id for scene_id in scenes.keys() if scene_id.startswith("镜头场景_")]
+            
+            for scene_id in auto_scene_ids:
+                del scenes[scene_id]
+                logger.info(f"已清除自动提取的场景: {scene_id}")
+            
+            if auto_scene_ids:
+                scenes_db["last_updated"] = self._get_current_time()
+                self._save_json(self.scenes_file, scenes_db)
+            
+            if auto_character_ids or auto_scene_ids:
+                logger.info(f"已清除 {len(auto_character_ids)} 个自动提取的角色和 {len(auto_scene_ids)} 个自动提取的场景")
+            
+        except Exception as e:
+            logger.error(f"清除自动提取数据失败: {e}")
+    
     def _get_current_time(self) -> str:
         """获取当前时间字符串"""
         from datetime import datetime
-        return datetime.now().isoformat()
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     def export_database(self, export_path: str) -> bool:
         """导出数据库到指定路径

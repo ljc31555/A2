@@ -29,6 +29,8 @@ from utils.config_manager import ConfigManager
 # from utils.project_manager import StoryboardProjectManager  # 注释掉旧的导入
 from utils.character_scene_manager import CharacterSceneManager
 from gui.character_scene_dialog import CharacterSceneDialog
+from processors.scene_description_enhancer import SceneDescriptionEnhancer
+from gui.scene_enhancer_config_panel import SceneEnhancerConfigPanel
 
 
 class StageWorkerThread(QThread):
@@ -37,11 +39,16 @@ class StageWorkerThread(QThread):
     stage_completed = pyqtSignal(int, dict)  # 阶段编号, 结果数据
     error_occurred = pyqtSignal(str)  # 错误信息
     
-    def __init__(self, stage_num, llm_api, input_data, style="电影风格", parent_tab=None):
+    def __init__(self, stage_num, llm_api, input_data, style=None, parent_tab=None):
         super().__init__()
         self.stage_num = stage_num
         self.llm_api = llm_api
         self.input_data = input_data
+        # 如果没有指定风格，从配置中获取默认风格
+        if style is None:
+            from utils.config_manager import ConfigManager
+            config_manager = ConfigManager()
+            style = config_manager.get_setting("default_style", "电影风格")
         self.style = style
         self.parent_tab = parent_tab
         self.is_cancelled = False
@@ -265,13 +272,11 @@ class StageWorkerThread(QThread):
 - **台词/旁白**：[如有]
 - **音效提示**：[环境音、特效音等]
 - **转场方式**：[切换/淡入淡出/叠化等]
-- **AI绘图提示词**：[用于AI图像生成的详细英文提示词]
-
 请确保：
 1. 严格遵循世界观圣经的设定
 2. 使用专业的影视术语
 3. 每个镜头都有明确的视觉目标
-4. AI绘图提示词要详细且专业
+4. 画面描述要详细且专业，包含完整的视觉信息
 5. 保持场景内镜头的连贯性
 """
             
@@ -338,7 +343,7 @@ class StageWorkerThread(QThread):
         }
 
 
-class FourStageStoryboardTab(QWidget):
+class FiveStageStoryboardTab(QWidget):
     """五阶段分镜生成标签页"""
     
     def __init__(self, parent=None):
@@ -354,6 +359,9 @@ class FourStageStoryboardTab(QWidget):
         # 角色场景管理器
         self.character_scene_manager = None
         self.character_dialog = None
+        
+        # 场景描述增强器
+        self.scene_enhancer = None
         
         # 选中的角色和场景
         self.selected_characters = []
@@ -378,7 +386,7 @@ class FourStageStoryboardTab(QWidget):
         self.load_models()
         
         # 确保UI组件已完全初始化后再加载项目数据
-        QTimer.singleShot(100, self.load_from_project)
+        QTimer.singleShot(500, self.delayed_load_from_project)
     
     def init_ui(self):
         """初始化UI界面"""
@@ -403,7 +411,10 @@ class FourStageStoryboardTab(QWidget):
         
         # 标题
         title_label = QLabel("🎬 五阶段分镜生成系统")
-        title_label.setFont(QFont("Arial", 16, QFont.Bold))
+        from utils.config_manager import ConfigManager
+        config_manager = ConfigManager()
+        default_font = config_manager.get_setting("default_font_family", "Arial")
+        title_label.setFont(QFont(default_font, 16, QFont.Bold))
         control_layout.addWidget(title_label)
         
         control_layout.addStretch()
@@ -427,6 +438,28 @@ class FourStageStoryboardTab(QWidget):
         self.character_btn.clicked.connect(self.open_character_dialog)
         self.character_btn.setToolTip("管理角色信息，确保分镜中角色的一致性")
         control_layout.addWidget(self.character_btn)
+        
+        # 场景描述增强选项
+        self.enhance_checkbox = QCheckBox("🎨 智能增强")
+        self.enhance_checkbox.setChecked(True)
+        self.enhance_checkbox.setToolTip("启用场景描述智能增强，自动添加技术细节和一致性描述")
+        self.enhance_checkbox.stateChanged.connect(self.on_enhance_option_changed)
+        control_layout.addWidget(self.enhance_checkbox)
+        
+        # 增强级别选择
+        control_layout.addWidget(QLabel("增强级别："))
+        self.enhance_level_combo = QComboBox()
+        self.enhance_level_combo.addItems(["低", "中", "高"])
+        self.enhance_level_combo.setCurrentText("中")
+        self.enhance_level_combo.setToolTip("选择场景描述增强的详细程度")
+        self.enhance_level_combo.currentTextChanged.connect(self.on_enhance_level_changed)
+        control_layout.addWidget(self.enhance_level_combo)
+        
+        # 场景增强器配置按钮
+        self.enhancer_config_btn = QPushButton("⚙️ 增强器配置")
+        self.enhancer_config_btn.clicked.connect(self.open_enhancer_config)
+        self.enhancer_config_btn.setToolTip("打开场景描述增强器的详细配置面板")
+        control_layout.addWidget(self.enhancer_config_btn)
         
         # 注释：保存按钮已移除，使用主窗口的统一保存功能
         
@@ -659,10 +692,12 @@ class FourStageStoryboardTab(QWidget):
         # 操作按钮
         btn_layout = QHBoxLayout()
         
+        # 第4阶段：分镜脚本生成按钮
         self.stage4_generate_btn = QPushButton("📝 生成分镜脚本")
         self.stage4_generate_btn.clicked.connect(lambda: self.start_stage(4))
         btn_layout.addWidget(self.stage4_generate_btn)
         
+        # 第4阶段：进入下一阶段按钮
         self.stage4_next_btn = QPushButton("➡️ 优化预览")
         self.stage4_next_btn.clicked.connect(lambda: self.tab_widget.setCurrentIndex(4))
         self.stage4_next_btn.setEnabled(False)
@@ -676,7 +711,7 @@ class FourStageStoryboardTab(QWidget):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
         
-        self.tab_widget.addTab(stage4_widget, "4️⃣ 分镜生成")
+        self.tab_widget.addTab(stage4_widget, "4️⃣ 分镜生成")  # 第4阶段：分镜脚本生成
     
     def create_stage5_tab(self):
         """创建阶段5标签页：优化预览"""
@@ -964,8 +999,18 @@ class FourStageStoryboardTab(QWidget):
                 if self.character_scene_manager:
                     characters = self.character_scene_manager.get_all_characters()
                     scenes = self.character_scene_manager.get_all_scenes()
+                    
+                    # 过滤掉分镜板生成的场景
+                    import re
+                    filtered_scene_count = 0
+                    if scenes:
+                        for scene_id, scene_data in scenes.items():
+                            scene_name = scene_data.get('name', '未命名')
+                            if not re.match(r'^场景\d+$', scene_name):
+                                filtered_scene_count += 1
+                    
                     if characters:
-                        character_info = f"角色数量: {len(characters)}, 场景数量: {len(scenes)}"
+                        character_info = f"角色数量: {len(characters)}, 用户创建场景数量: {filtered_scene_count}"
                 
                 # 确保阶段2有数据，即使是空的也要有标记
                 if not self.stage_data[2]:
@@ -985,9 +1030,13 @@ class FourStageStoryboardTab(QWidget):
                 self._display_storyboard_results(result.get("storyboard_results", []))
                 self.stage4_next_btn.setEnabled(True)
                 self.status_label.setText("✅ 分镜脚本生成完成")
+                # 转换数据并传递给一致性控制面板
+                self._update_consistency_panel()
             elif stage_num == 5:
                 self._display_optimization_results(result.get("optimization_suggestions", []))
                 self.status_label.setText("✅ 优化分析完成")
+                # 转换数据并传递给一致性控制面板
+                self._update_consistency_panel()
             
             # 更新当前阶段
             self.current_stage = stage_num
@@ -1016,7 +1065,8 @@ class FourStageStoryboardTab(QWidget):
                 logger.warning("没有当前项目，无法保存世界观圣经文件")
                 return
             
-            project_name = self.project_manager.current_project.get('name', '')
+            # 兼容新旧项目格式
+            project_name = self.project_manager.current_project.get('project_name') or self.project_manager.current_project.get('name', '')
             if not project_name:
                 logger.warning("项目名称为空，无法保存世界观圣经文件")
                 return
@@ -1042,54 +1092,40 @@ class FourStageStoryboardTab(QWidget):
         except Exception as e:
             logger.error(f"保存世界观圣经文件失败: {e}")
     
-    def _load_world_bible_from_file(self):
-        """从项目特定的texts文件夹加载世界观圣经内容"""
-        try:
-            # 获取当前项目信息
-            if not self.project_manager or not self.project_manager.current_project:
-                logger.info("没有当前项目，无法从项目文件夹加载世界观圣经")
-                return None
-            
-            project_name = self.project_manager.current_project.get('name', '')
-            if not project_name:
-                logger.info("项目名称为空，无法从项目文件夹加载世界观圣经")
-                return None
-            
-            # 构建项目特定的世界观圣经文件路径
-            world_bible_file = os.path.join(os.getcwd(), "output", project_name, "texts", "world_bible.json")
-            if os.path.exists(world_bible_file):
-                with open(world_bible_file, 'r', encoding='utf-8') as f:
-                    world_bible_data = json.load(f)
-                    content = world_bible_data.get("content", "")
-                    logger.info(f"从项目文件加载世界观圣经内容，长度: {len(content)}")
-                    return content
-            else:
-                logger.info(f"项目世界观圣经文件不存在: {world_bible_file}")
-                return None
-        except Exception as e:
-            logger.error(f"加载项目世界观圣经文件失败: {e}")
-            return None
+
     
     def _reset_ui_state(self):
         """重置UI状态"""
         self.progress_bar.setVisible(False)
         self.stop_btn.setEnabled(False)
         
-        # 恢复按钮状态
+        # 恢复按钮状态，根据当前阶段设置合适的按钮文本
         self.stage1_generate_btn.setEnabled(True)
-        self.stage1_generate_btn.setText("🚀 开始全局分析")
+        if self.current_stage >= 1:
+            self.stage1_generate_btn.setText("🔄 重新分析")
+        else:
+            self.stage1_generate_btn.setText("🚀 开始全局分析")
         
         self.stage2_generate_btn.setEnabled(True)
         self.stage2_generate_btn.setText("🔄 刷新角色信息")
         
         self.stage3_generate_btn.setEnabled(True)
-        self.stage3_generate_btn.setText("🎬 开始场景分割")
+        if self.current_stage >= 3:
+            self.stage3_generate_btn.setText("🔄 重新分割场景")
+        else:
+            self.stage3_generate_btn.setText("🎬 开始场景分割")
         
         self.stage4_generate_btn.setEnabled(True)
-        self.stage4_generate_btn.setText("📝 生成分镜脚本")
+        if self.current_stage >= 4:
+            self.stage4_generate_btn.setText("🔄 重新生成分镜")
+        else:
+            self.stage4_generate_btn.setText("📝 生成分镜脚本")
         
         self.stage5_generate_btn.setEnabled(True)
-        self.stage5_generate_btn.setText("🎨 生成优化建议")
+        if self.current_stage >= 5:
+            self.stage5_generate_btn.setText("🔄 重新优化")
+        else:
+            self.stage5_generate_btn.setText("🎨 生成优化建议")
     
     def _update_scenes_list(self, scenes_analysis):
         """更新场景列表"""
@@ -1100,15 +1136,24 @@ class FourStageStoryboardTab(QWidget):
         scene_count = 0
         
         for line in lines:
-            if line.strip().startswith('### 场景') or line.strip().startswith('## 场景'):
+            line_strip = line.strip()
+            if line_strip.startswith('### 场景') or line_strip.startswith('## 场景'):
+                # 提取标题部分，去除前缀
+                # 例如：### 场景1：叶文洁的内心挣扎  => 叶文洁的内心挣扎
+                parts = line_strip.split('：', 1)
+                if len(parts) == 2:
+                    title = parts[1].strip()
+                else:
+                    # 兼容没有冒号的情况
+                    title = line_strip.split(' ', 1)[-1].replace('场景','').replace('#','').strip()
                 scene_count += 1
-                item = QListWidgetItem(f"场景{scene_count}: {line.strip()}")
+                item = QListWidgetItem(f"场景{scene_count}：{title}")
                 self.scenes_list.addItem(item)
         
         if scene_count == 0:
             # 如果没有找到标准格式的场景，创建默认场景
             for i in range(3):  # 默认创建3个场景
-                item = QListWidgetItem(f"场景{i+1}: 默认场景")
+                item = QListWidgetItem(f"场景{i+1}：默认场景")
                 self.scenes_list.addItem(item)
     
     def _display_storyboard_results(self, storyboard_results):
@@ -1210,7 +1255,7 @@ class FourStageStoryboardTab(QWidget):
                 return
             
             # 更新项目数据
-            self.project_manager.current_project['four_stage_storyboard'] = {
+            self.project_manager.current_project['five_stage_storyboard'] = {
                 'stage_data': self.stage_data,
                 'current_stage': self.current_stage,
                 'selected_characters': self.selected_characters,
@@ -1223,22 +1268,71 @@ class FourStageStoryboardTab(QWidget):
             # 保存项目
             success = self.project_manager.save_project()
             if success:
-                logger.info(f"五阶段分镜数据已保存到项目: {self.project_manager.current_project['name']}")
+                logger.info(f"五阶段分镜数据已保存到项目: {self.project_manager.current_project['project_name']}")
                 
                 # 通知主窗口更新项目状态
                 if self.parent_window and hasattr(self.parent_window, 'update_project_status'):
                     self.parent_window.update_project_status()
                     
             else:
-                logger.error(f"保存五阶段分镜数据失败: {self.project_manager.current_project['name']}")
+                logger.error(f"保存五阶段分镜数据失败: {self.project_manager.current_project['project_name']}")
                 
         except Exception as e:
             logger.error(f"保存五阶段分镜数据时出错: {e}")
     
-    def load_from_project(self):
-        """从当前项目加载五阶段数据"""
+    def delayed_load_from_project(self):
+        """延迟加载项目数据，确保UI组件已完全初始化"""
+        logger.info("开始延迟加载项目数据...")
+        
+        # 检查关键UI组件是否已初始化（包括组件存在性和可用性）
+        ui_components = {
+            'world_bible_output': hasattr(self, 'world_bible_output') and self.world_bible_output is not None,
+            'scenes_output': hasattr(self, 'scenes_output') and self.scenes_output is not None,
+            'storyboard_output': hasattr(self, 'storyboard_output') and self.storyboard_output is not None,
+            'optimization_output': hasattr(self, 'optimization_output') and self.optimization_output is not None,
+            'article_input': hasattr(self, 'article_input') and self.article_input is not None,
+            'style_combo': hasattr(self, 'style_combo') and self.style_combo is not None,
+            'model_combo': hasattr(self, 'model_combo') and self.model_combo is not None,
+            'scenes_list': hasattr(self, 'scenes_list') and self.scenes_list is not None,
+            'status_label': hasattr(self, 'status_label') and self.status_label is not None
+        }
+        
+        logger.info(f"UI组件初始化状态: {ui_components}")
+        
+        # 如果关键组件未初始化，再次延迟
+        missing_components = [name for name, exists in ui_components.items() if not exists]
+        if missing_components:
+            # 初始化重试计数器
+            if not hasattr(self, '_delayed_load_retry_count'):
+                self._delayed_load_retry_count = 0
+            
+            self._delayed_load_retry_count += 1
+            
+            if self._delayed_load_retry_count < 10:  # 最多重试10次
+                logger.warning(f"以下UI组件尚未初始化: {missing_components}，第{self._delayed_load_retry_count}次重试")
+                QTimer.singleShot(300, self.delayed_load_from_project)  # 减少延迟时间
+                return
+            else:
+                logger.error(f"UI组件初始化超时，缺少组件: {missing_components}，尝试强制加载")
+                # 强制加载，忽略缺失的组件
+                self.load_from_project(force_load=True)
+                return
+        
+        # 重置重试计数器
+        self._delayed_load_retry_count = 0
+        
+        # 所有组件已初始化，开始加载项目数据
+        logger.info("所有UI组件已初始化，开始加载五阶段分镜数据")
+        self.load_from_project()
+
+    def load_from_project(self, force_load=False):
+        """从当前项目加载五阶段数据
+        
+        Args:
+            force_load (bool): 是否强制加载，即使某些UI组件缺失
+        """
         try:
-            logger.info("开始加载五阶段分镜数据...")
+            logger.info(f"开始加载五阶段分镜数据... (强制加载: {force_load})")
             
             if not self.project_manager or not self.project_manager.current_project:
                 logger.info("没有当前项目，跳过加载五阶段数据")
@@ -1258,65 +1352,103 @@ class FourStageStoryboardTab(QWidget):
                 self.character_scene_manager = CharacterSceneManager(project_dir, service_manager)
                 self.character_dialog = CharacterSceneDialog(self.character_scene_manager, self)
                 
+                # 初始化场景描述增强器
+                # 确保llm_api已初始化
+                if not hasattr(self, 'llm_api') or self.llm_api is None:
+                    self._init_llm_api()
+                
+                self.scene_enhancer = SceneDescriptionEnhancer(project_dir, self.character_scene_manager, self.llm_api)
+                logger.info("场景描述增强器已初始化")
+                
                 # 检查并记录现有的角色和场景数据
                 existing_characters = self.character_scene_manager.get_all_characters()
                 existing_scenes = self.character_scene_manager.get_all_scenes()
-                logger.info(f"项目加载时发现角色数量: {len(existing_characters)}, 场景数量: {len(existing_scenes)}")
+                
+                # 过滤掉分镜板生成的场景（如"场景1"、"场景2"等）
+                import re
+                filtered_scenes = {scene_id: scene_data for scene_id, scene_data in existing_scenes.items() 
+                                 if not re.match(r'^场景\d+$', scene_data.get('name', '未命名'))}
+                
+                logger.info(f"项目加载时发现角色数量: {len(existing_characters)}, 用户创建场景数量: {len(filtered_scenes)}")
                 
                 # 如果有现有数据，刷新角色管理对话框
-                if existing_characters or existing_scenes:
+                if existing_characters or filtered_scenes:
                     if hasattr(self.character_dialog, 'refresh_character_list'):
                         self.character_dialog.refresh_character_list()
                     if hasattr(self.character_dialog, 'refresh_scene_list'):
                         self.character_dialog.refresh_scene_list()
                     logger.info("已刷新角色场景管理对话框显示")
             
-            if 'four_stage_storyboard' not in project_data:
+            if 'five_stage_storyboard' not in project_data:
                 logger.info(f"项目 {project_data.get('name', 'Unknown')} 中没有五阶段分镜数据")
                 logger.info(f"项目数据键: {list(project_data.keys())}")
                 return
             
-            four_stage_data = project_data['four_stage_storyboard']
-            logger.info(f"找到五阶段数据，包含键: {list(four_stage_data.keys())}")
+            five_stage_data = project_data['five_stage_storyboard']
+            logger.info(f"找到五阶段数据，包含键: {list(five_stage_data.keys())}")
             
             # 恢复阶段数据
-            self.stage_data = four_stage_data.get('stage_data', {1: {}, 2: {}, 3: {}, 4: {}, 5: {}})
-            self.current_stage = four_stage_data.get('current_stage', 1)
+            loaded_stage_data = five_stage_data.get('stage_data', {})
+            # 确保所有阶段都有默认值，但保留已加载的数据
+            self.stage_data = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}}
+            
+            # 处理键类型转换（JSON中的键是字符串）
+            for key, value in loaded_stage_data.items():
+                try:
+                    # 尝试将字符串键转换为整数
+                    int_key = int(key)
+                    self.stage_data[int_key] = value
+                except (ValueError, TypeError):
+                    # 如果转换失败，保持原键
+                    self.stage_data[key] = value
+            
+            logger.info(f"加载的stage_data键: {list(loaded_stage_data.keys())}")
+            logger.info(f"转换后的stage_data键: {list(self.stage_data.keys())}")
+            logger.info(f"第4阶段数据存在: {bool(self.stage_data.get(4))}")
+            if self.stage_data.get(4):
+                logger.info(f"第4阶段包含键: {list(self.stage_data[4].keys())}")
+                logger.info(f"storyboard_results存在: {'storyboard_results' in self.stage_data[4]}")
+                if 'storyboard_results' in self.stage_data[4]:
+                    logger.info(f"storyboard_results长度: {len(self.stage_data[4]['storyboard_results'])}")
+            self.current_stage = five_stage_data.get('current_stage', 1)
             
             # 恢复选中的角色和场景
-            self.selected_characters = four_stage_data.get('selected_characters', [])
-            self.selected_scenes = four_stage_data.get('selected_scenes', [])
+            self.selected_characters = five_stage_data.get('selected_characters', [])
+            self.selected_scenes = five_stage_data.get('selected_scenes', [])
             
-            # 恢复UI状态
-            article_text = four_stage_data.get('article_text', '')
-            if article_text:
+            # 恢复UI状态（考虑force_load模式）
+            article_text = five_stage_data.get('article_text', '')
+            if article_text and hasattr(self, 'article_input') and self.article_input:
                 self.article_input.setPlainText(article_text)
+            elif article_text and force_load:
+                logger.warning("article_input组件缺失，跳过文章文本恢复")
             
-            selected_style = four_stage_data.get('selected_style', '电影风格')
-            style_index = self.style_combo.findText(selected_style)
-            if style_index >= 0:
-                self.style_combo.setCurrentIndex(style_index)
+            selected_style = five_stage_data.get('selected_style', '电影风格')
+            if hasattr(self, 'style_combo') and self.style_combo:
+                style_index = self.style_combo.findText(selected_style)
+                if style_index >= 0:
+                    self.style_combo.setCurrentIndex(style_index)
+            elif force_load:
+                logger.warning("style_combo组件缺失，跳过风格选择恢复")
             
-            selected_model = four_stage_data.get('selected_model', '')
-            if selected_model:
+            selected_model = five_stage_data.get('selected_model', '')
+            if selected_model and hasattr(self, 'model_combo') and self.model_combo:
                 model_index = self.model_combo.findText(selected_model)
                 if model_index >= 0:
                     self.model_combo.setCurrentIndex(model_index)
+            elif selected_model and force_load:
+                logger.warning("model_combo组件缺失，跳过模型选择恢复")
             
             # 恢复各阶段的显示内容和UI状态
             if self.stage_data.get(1):
                 world_bible = self.stage_data[1].get('world_bible', '')
                 logger.info(f"第1阶段数据 - world_bible长度: {len(world_bible)}")
                 
-                # 如果项目数据中没有world_bible，尝试从文件加载
+                # 如果项目数据中没有world_bible，记录日志
                 if not world_bible:
-                    world_bible = self._load_world_bible_from_file()
-                    if world_bible:
-                        logger.info(f"从文件加载world_bible内容，长度: {len(world_bible)}")
-                        # 更新stage_data
-                        self.stage_data[1]['world_bible'] = world_bible
+                    logger.info("项目数据中没有world_bible内容")
                 
-                if world_bible and hasattr(self, 'world_bible_output'):
+                if world_bible and hasattr(self, 'world_bible_output') and self.world_bible_output:
                     self.world_bible_output.setText(world_bible)
                     logger.info("已设置world_bible_output内容")
                     
@@ -1325,12 +1457,19 @@ class FourStageStoryboardTab(QWidget):
                         existing_characters = self.character_scene_manager.get_all_characters()
                         existing_scenes = self.character_scene_manager.get_all_scenes()
                         
-                        if not existing_characters and not existing_scenes:
+                        # 过滤掉分镜板生成的场景（如"场景1"、"场景2"等）
+                        import re
+                        filtered_scenes = {scene_id: scene_data for scene_id, scene_data in existing_scenes.items() 
+                                         if not re.match(r'^场景\d+$', scene_data.get('name', '未命名'))}
+                        
+                        if not existing_characters and not filtered_scenes:
                             # 只有在没有现有数据时才自动提取
                             self.auto_extract_characters_from_world_bible(world_bible)
                             logger.info("已自动提取角色信息（首次加载）")
                         else:
-                            logger.info(f"已存在角色信息，跳过自动提取（角色: {len(existing_characters)}, 场景: {len(existing_scenes)}）")
+                            logger.info(f"已存在角色信息，跳过自动提取（角色: {len(existing_characters)}, 用户创建场景: {len(filtered_scenes)}）")
+                elif world_bible and force_load:
+                    logger.warning("world_bible_output组件缺失，跳过世界观内容恢复")
                 else:
                     logger.warning(f"world_bible为空或world_bible_output不存在: world_bible={bool(world_bible)}, hasattr={hasattr(self, 'world_bible_output')}")
                 
@@ -1350,10 +1489,18 @@ class FourStageStoryboardTab(QWidget):
             if self.stage_data.get(3):
                 scenes_analysis = self.stage_data[3].get('scenes_analysis', '')
                 logger.info(f"第3阶段数据 - scenes_analysis长度: {len(scenes_analysis)}")
-                if scenes_analysis and hasattr(self, 'scenes_output'):
-                    self.scenes_output.setText(scenes_analysis)
-                    logger.info("已设置scenes_output内容")
-                    self._update_scenes_list(scenes_analysis)
+                logger.info(f"scenes_output组件存在: {hasattr(self, 'scenes_output')}")
+                if hasattr(self, 'scenes_output'):
+                    logger.info(f"scenes_output类型: {type(self.scenes_output)}")
+                if scenes_analysis and hasattr(self, 'scenes_output') and self.scenes_output:
+                    try:
+                        self.scenes_output.setText(scenes_analysis)
+                        logger.info(f"已成功设置scenes_output内容，当前文本长度: {len(self.scenes_output.toPlainText())}")
+                        self._update_scenes_list(scenes_analysis)
+                    except Exception as e:
+                        logger.error(f"设置scenes_output内容时出错: {e}")
+                elif scenes_analysis and force_load:
+                    logger.warning("scenes_output组件缺失，跳过场景分析内容恢复")
                 else:
                     logger.warning(f"scenes_analysis为空或scenes_output不存在: scenes_analysis={bool(scenes_analysis)}, hasattr={hasattr(self, 'scenes_output')}")
                 
@@ -1366,11 +1513,41 @@ class FourStageStoryboardTab(QWidget):
             if self.stage_data.get(4):
                 storyboard_results = self.stage_data[4].get('storyboard_results', [])
                 logger.info(f"第4阶段数据 - storyboard_results数量: {len(storyboard_results)}")
-                if storyboard_results and hasattr(self, 'storyboard_output'):
-                    self._display_storyboard_results(storyboard_results)
-                    logger.info("已设置storyboard_output内容")
+                logger.info(f"storyboard_output组件存在: {hasattr(self, 'storyboard_output')}")
+                if hasattr(self, 'storyboard_output'):
+                    logger.info(f"storyboard_output类型: {type(self.storyboard_output)}")
+                    logger.info(f"storyboard_output是否为None: {self.storyboard_output is None}")
+                
+                # 详细记录storyboard_results的内容
+                if storyboard_results:
+                    logger.info(f"第一个storyboard_result的键: {list(storyboard_results[0].keys()) if storyboard_results else 'N/A'}")
+                    for i, result in enumerate(storyboard_results[:2]):  # 只记录前两个
+                        scene_info = result.get("scene_info", "")
+                        storyboard_script = result.get("storyboard_script", "")
+                        logger.info(f"场景{i+1} - scene_info长度: {len(scene_info)}, storyboard_script长度: {len(storyboard_script)}")
+                
+                if storyboard_results and hasattr(self, 'storyboard_output') and self.storyboard_output:
+                    try:
+                        logger.info("开始调用_display_storyboard_results方法...")
+                        self._display_storyboard_results(storyboard_results)
+                        current_text_length = len(self.storyboard_output.toPlainText())
+                        logger.info(f"已成功设置storyboard_output内容，当前文本长度: {current_text_length}")
+                        
+                        # 如果文本长度为0，说明显示有问题
+                        if current_text_length == 0:
+                            logger.error("storyboard_output文本长度为0，显示可能失败")
+                            # 尝试直接设置一些测试文本
+                            test_text = "测试文本 - 第四阶段数据加载"
+                            self.storyboard_output.setText(test_text)
+                            logger.info(f"设置测试文本后长度: {len(self.storyboard_output.toPlainText())}")
+                    except Exception as e:
+                        logger.error(f"设置storyboard_output内容时出错: {e}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                elif storyboard_results and force_load:
+                    logger.warning("storyboard_output组件缺失，跳过分镜脚本内容恢复")
                 else:
-                    logger.warning(f"storyboard_results为空或storyboard_output不存在: storyboard_results={bool(storyboard_results)}, hasattr={hasattr(self, 'storyboard_output')}")
+                    logger.warning(f"storyboard_results为空或storyboard_output不存在: storyboard_results={bool(storyboard_results)}, hasattr={hasattr(self, 'storyboard_output')}, storyboard_output_is_none={getattr(self, 'storyboard_output', None) is None}")
                 
                 if hasattr(self, 'stage4_next_btn'):
                     self.stage4_next_btn.setEnabled(True)
@@ -1381,9 +1558,17 @@ class FourStageStoryboardTab(QWidget):
             if self.stage_data.get(5):
                 optimization_suggestions = self.stage_data[5].get('optimization_suggestions', [])
                 logger.info(f"第5阶段数据 - optimization_suggestions数量: {len(optimization_suggestions)}")
-                if optimization_suggestions and hasattr(self, 'optimization_output'):
-                    self._display_optimization_results(optimization_suggestions)
-                    logger.info("已设置optimization_output内容")
+                logger.info(f"optimization_output组件存在: {hasattr(self, 'optimization_output')}")
+                if hasattr(self, 'optimization_output'):
+                    logger.info(f"optimization_output类型: {type(self.optimization_output)}")
+                if optimization_suggestions and hasattr(self, 'optimization_output') and self.optimization_output:
+                    try:
+                        self._display_optimization_results(optimization_suggestions)
+                        logger.info(f"已成功设置optimization_output内容，当前文本长度: {len(self.optimization_output.toPlainText())}")
+                    except Exception as e:
+                        logger.error(f"设置optimization_output内容时出错: {e}")
+                elif optimization_suggestions and force_load:
+                    logger.warning("optimization_output组件缺失，跳过优化建议内容恢复")
                 else:
                     logger.warning(f"optimization_suggestions为空或optimization_output不存在: optimization_suggestions={bool(optimization_suggestions)}, hasattr={hasattr(self, 'optimization_output')}")
                 
@@ -1391,20 +1576,60 @@ class FourStageStoryboardTab(QWidget):
                 if hasattr(self, 'status_label'):
                     self.status_label.setText("✅ 优化分析完成")
             
-            # 根据当前阶段更新UI状态
-            if self.current_stage >= 1 and hasattr(self, 'stage1_generate_btn'):
-                self.stage1_generate_btn.setEnabled(False)  # 已完成的阶段禁用按钮
-            if self.current_stage >= 2 and hasattr(self, 'stage2_generate_btn'):
-                self.stage2_generate_btn.setEnabled(False)
-            if self.current_stage >= 3 and hasattr(self, 'stage3_generate_btn'):
-                self.stage3_generate_btn.setEnabled(False)
-            if self.current_stage >= 4 and hasattr(self, 'stage4_generate_btn'):
-                self.stage4_generate_btn.setEnabled(False)
-            if self.current_stage >= 5 and hasattr(self, 'stage5_generate_btn'):
-                self.stage5_generate_btn.setEnabled(False)
+            # 保持所有按钮可用，允许用户重新运行任何阶段
+            # 注释掉原来的禁用逻辑，让用户可以随时调整和重新生成
+            if hasattr(self, 'stage1_generate_btn'):
+                self.stage1_generate_btn.setEnabled(True)
+                # 如果阶段已完成，更新按钮文本提示
+                if self.current_stage >= 1:
+                    self.stage1_generate_btn.setText("🔄 重新分析")
+                else:
+                    self.stage1_generate_btn.setText("🚀 开始全局分析")
+            
+            if hasattr(self, 'stage2_generate_btn'):
+                self.stage2_generate_btn.setEnabled(True)
+                self.stage2_generate_btn.setText("🔄 刷新角色信息")
+            
+            if hasattr(self, 'stage3_generate_btn'):
+                self.stage3_generate_btn.setEnabled(True)
+                if self.current_stage >= 3:
+                    self.stage3_generate_btn.setText("🔄 重新分割场景")
+                else:
+                    self.stage3_generate_btn.setText("🎬 开始场景分割")
+            
+            if hasattr(self, 'stage4_generate_btn'):
+                self.stage4_generate_btn.setEnabled(True)
+                if self.current_stage >= 4:
+                    self.stage4_generate_btn.setText("🔄 重新生成分镜")
+                else:
+                    self.stage4_generate_btn.setText("📝 生成分镜脚本")
+            
+            if hasattr(self, 'stage5_generate_btn'):
+                self.stage5_generate_btn.setEnabled(True)
+                if self.current_stage >= 5:
+                    self.stage5_generate_btn.setText("🔄 重新优化")
+                else:
+                    self.stage5_generate_btn.setText("🎨 生成优化建议")
             
             logger.info(f"已从项目 {project_data.get('name', 'Unknown')} 加载五阶段分镜数据")
             logger.info(f"当前阶段: {self.current_stage}, 阶段数据: {list(self.stage_data.keys())}")
+            
+            # 添加详细的阶段数据日志
+            for stage_num, stage_content in self.stage_data.items():
+                logger.info(f"阶段 {stage_num} 包含的键: {list(stage_content.keys()) if isinstance(stage_content, dict) else '非字典类型'}")
+                if isinstance(stage_content, dict):
+                    for key, value in stage_content.items():
+                        if isinstance(value, str):
+                            logger.info(f"  - {key}: 字符串长度 {len(value)}")
+                        elif isinstance(value, (list, dict)):
+                            logger.info(f"  - {key}: {type(value).__name__} 长度/大小 {len(value)}")
+                        else:
+                            logger.info(f"  - {key}: {type(value).__name__} = {value}")
+            
+            # 如果有第4阶段的分镜数据，更新一致性控制面板
+            if self.stage_data.get(4) and self.stage_data[4].get('storyboard_results'):
+                logger.info("项目加载完成，更新一致性控制面板...")
+                self._update_consistency_panel()
             
         except Exception as e:
             logger.error(f"加载五阶段分镜数据时出错: {e}")
@@ -1455,9 +1680,18 @@ class FourStageStoryboardTab(QWidget):
                 
                 # 修复：get_all_characters()和get_all_scenes()返回的是字典，不是列表
                 self.selected_characters = list(characters.keys())
-                self.selected_scenes = list(scenes.keys())
                 
-                logger.info(f"已选择 {len(self.selected_characters)} 个角色和 {len(self.selected_scenes)} 个场景")
+                # 过滤掉分镜板生成的场景（如"场景1"、"场景2"等）
+                import re
+                filtered_scene_keys = []
+                for scene_id, scene_data in scenes.items():
+                    scene_name = scene_data.get('name', '未命名')
+                    if not re.match(r'^场景\d+$', scene_name):
+                        filtered_scene_keys.append(scene_id)
+                
+                self.selected_scenes = filtered_scene_keys
+                
+                logger.info(f"已选择 {len(self.selected_characters)} 个角色和 {len(self.selected_scenes)} 个用户创建的场景")
                 
         except Exception as e:
             logger.error(f"更新角色选择时出错: {e}")
@@ -1577,12 +1811,27 @@ class FourStageStoryboardTab(QWidget):
                     display_text += "暂无角色信息\n\n"
                 
                 if scenes:
-                    display_text += "=== 场景信息 ===\n\n"
+                    # 过滤掉分镜板生成的场景（如"场景1"、"场景2"等）
+                    import re
+                    filtered_scenes = {}
                     for scene_id, scene_data in scenes.items():
-                        name = scene_data.get('name', '未命名')
-                        description = scene_data.get('description', '无描述')
-                        display_text += f"🏞️ {name}\n"
-                        display_text += f"   描述: {description}\n\n"
+                        scene_name = scene_data.get('name', '未命名')
+                        # 过滤掉匹配"场景"后跟数字的场景
+                        if not re.match(r'^场景\d+$', scene_name):
+                            filtered_scenes[scene_id] = scene_data
+                    
+                    if filtered_scenes:
+                        display_text += "=== 场景信息 ===\n\n"
+                        for scene_id, scene_data in filtered_scenes.items():
+                            name = scene_data.get('name', '未命名')
+                            description = scene_data.get('description', '无描述')
+                            display_text += f"🏞️ {name}\n"
+                            display_text += f"   描述: {description}\n\n"
+                        display_text += f"\n注：已排除 {len(scenes) - len(filtered_scenes)} 个分镜板生成的场景\n"
+                    else:
+                        display_text += "暂无用户创建的场景信息\n"
+                        if len(scenes) > 0:
+                            display_text += f"（已排除 {len(scenes)} 个分镜板生成的场景）\n"
                 else:
                     display_text += "暂无场景信息\n"
                 
@@ -1590,7 +1839,16 @@ class FourStageStoryboardTab(QWidget):
                 self.characters_output.setPlainText(display_text)
                 
                 # 标记阶段2为完成状态
-                character_info = f"角色数量: {len(characters)}, 场景数量: {len(scenes)}"
+                # 计算过滤后的场景数量
+                import re
+                filtered_scene_count = 0
+                if scenes:
+                    for scene_id, scene_data in scenes.items():
+                        scene_name = scene_data.get('name', '未命名')
+                        if not re.match(r'^场景\d+$', scene_name):
+                            filtered_scene_count += 1
+                
+                character_info = f"角色数量: {len(characters)}, 用户创建场景数量: {filtered_scene_count}"
                 self.stage_data[2] = {
                     "character_info": character_info,
                     "completed": True,
@@ -1605,7 +1863,7 @@ class FourStageStoryboardTab(QWidget):
                 self.save_to_project()
                 
                 logger.info("角色信息已刷新")
-                QMessageBox.information(self, "提示", f"角色信息已刷新\n角色数量: {len(characters)}\n场景数量: {len(scenes)}\n阶段2已标记为完成")
+                QMessageBox.information(self, "提示", f"角色信息已刷新\n角色数量: {len(characters)}\n用户创建场景数量: {filtered_scene_count}\n阶段2已标记为完成")
             else:
                 QMessageBox.warning(self, "提示", "角色场景管理器未初始化")
                 
@@ -1656,7 +1914,230 @@ class FourStageStoryboardTab(QWidget):
             
             self.optimization_output.setPlainText(display_text)
             logger.info(f"已显示 {len(optimization_suggestions)} 个场景的优化建议")
-            
         except Exception as e:
             logger.error(f"显示优化建议时出错: {e}")
-            self.optimization_output.setPlainText(f"显示优化建议时出错: {e}")
+            self.optimization_output.setPlainText("显示优化建议时出错")
+    
+    def _update_consistency_panel(self):
+        """将五阶段分镜数据转换并传递给一致性控制面板"""
+        try:
+            # 检查是否有分镜数据
+            storyboard_results = self.stage_data.get(4, {}).get("storyboard_results", [])
+            if not self.stage_data.get(4) or not storyboard_results:
+                logger.warning(f"没有分镜数据可传递给一致性控制面板，stage_data[4]存在: {bool(self.stage_data.get(4))}, storyboard_results长度: {len(storyboard_results)}")
+                return
+            
+            # 检查主窗口是否有一致性控制面板
+            if not hasattr(self.parent_window, 'consistency_panel'):
+                logger.warning("主窗口没有一致性控制面板")
+                return
+            
+            # 导入必要的类
+            from processors.text_processor import Shot, StoryboardResult
+            
+            # 转换五阶段分镜数据为StoryboardResult格式
+            # storyboard_results已在上面定义
+            shots = []
+            characters = set()
+            scenes = set()
+            total_duration = 0.0
+            
+            # 过滤掉分镜生成的场景（场景1、场景2、场景3、场景4等），只传递用户创建的场景
+            import re
+            
+            shot_id = 1
+            for scene_idx, scene_result in enumerate(storyboard_results):
+                scene_info = scene_result.get("scene_info", f"场景{scene_idx + 1}")
+                storyboard_script = scene_result.get("storyboard_script", "")
+                
+                # 检查是否为分镜生成的场景，如果是则跳过添加到scenes集合
+                is_auto_generated_scene = re.match(r'^场景\d+', scene_info.strip())
+                
+                # 解析分镜脚本中的分镜
+                script_lines = storyboard_script.split('\n')
+                current_shot = None
+                
+                for line in script_lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # 检测分镜开始标记
+                    if line.startswith('分镜') or line.startswith('镜头') or 'Shot' in line:
+                        # 保存上一个分镜
+                        if current_shot:
+                            shots.append(current_shot)
+                            shot_id += 1
+                        
+                        # 创建新分镜
+                        current_shot = Shot(
+                            shot_id=shot_id,
+                            scene=scene_info,
+                            characters=[],
+                            action="",
+                            dialogue="",
+                            image_prompt="",
+                            duration=3.0  # 默认3秒
+                        )
+                        # 只有非自动生成的场景才添加到scenes集合中
+                        if not is_auto_generated_scene:
+                            scenes.add(scene_info)
+                        total_duration += 3.0
+                    elif current_shot:
+                        # 解析分镜内容
+                        if '角色' in line or '人物' in line:
+                            # 提取角色信息
+                            char_info = line.split('：')[-1] if '：' in line else line
+                            current_shot.characters.append(char_info.strip())
+                            characters.add(char_info.strip())
+                        elif '动作' in line or '行为' in line:
+                            # 提取动作信息
+                            current_shot.action = line.split('：')[-1] if '：' in line else line
+                        elif '对话' in line or '台词' in line:
+                            # 提取对话信息
+                            current_shot.dialogue = line.split('：')[-1] if '：' in line else line
+                        elif '画面' in line or '镜头' in line or '描述' in line:
+                            # 提取画面描述作为图像提示词
+                            prompt = line.split('：')[-1] if '：' in line else line
+                            original_prompt = prompt.strip()
+                            
+                            # 应用场景描述增强
+                            if self.scene_enhancer:
+                                try:
+                                    enhanced_prompt = self.scene_enhancer.enhance_description(
+                                        original_prompt, current_shot.characters
+                                    )
+                                    current_shot.image_prompt = enhanced_prompt
+                                    logger.debug(f"画面描述已增强: {original_prompt[:30]}... -> {enhanced_prompt[:50]}...")
+                                except Exception as e:
+                                    logger.error(f"画面描述增强失败: {e}")
+                                    current_shot.image_prompt = original_prompt
+                            else:
+                                current_shot.image_prompt = original_prompt
+                        else:
+                            # 其他内容添加到动作描述中
+                            if current_shot.action:
+                                current_shot.action += " " + line
+                            else:
+                                current_shot.action = line
+                
+                # 保存最后一个分镜
+                if current_shot:
+                    shots.append(current_shot)
+            
+            # 如果没有解析到分镜，创建一个默认分镜
+            if not shots:
+                for scene_idx, scene_result in enumerate(storyboard_results):
+                    scene_info = scene_result.get("scene_info", f"场景{scene_idx + 1}")
+                    storyboard_script = scene_result.get("storyboard_script", "")
+                    
+                    # 检查是否为分镜生成的场景
+                    is_auto_generated_scene = re.match(r'^场景\d+', scene_info.strip())
+                    
+                    # 创建默认画面描述
+                    original_prompt = scene_info
+                    enhanced_prompt = original_prompt
+                    
+                    # 应用场景描述增强
+                    if self.scene_enhancer:
+                        try:
+                            enhanced_prompt = self.scene_enhancer.enhance_description(
+                                original_prompt, []
+                            )
+                            logger.debug(f"默认画面描述已增强: {original_prompt} -> {enhanced_prompt[:50]}...")
+                        except Exception as e:
+                            logger.error(f"默认画面描述增强失败: {e}")
+                            enhanced_prompt = original_prompt
+                    
+                    shot = Shot(
+                        shot_id=scene_idx + 1,
+                        scene=scene_info,
+                        characters=[],
+                        action=storyboard_script[:200] + "..." if len(storyboard_script) > 200 else storyboard_script,
+                        dialogue="",
+                        image_prompt=enhanced_prompt,
+                        duration=3.0
+                    )
+                    shots.append(shot)
+                    # 只有非自动生成的场景才添加到scenes集合中
+                    if not is_auto_generated_scene:
+                        scenes.add(scene_info)
+                    total_duration += 3.0
+            
+            # 创建StoryboardResult对象
+            storyboard_result = StoryboardResult(
+                shots=shots,
+                total_duration=total_duration,
+                characters=list(characters),
+                scenes=list(scenes),
+                style=self.style_combo.currentText() if hasattr(self, 'style_combo') else self._get_default_style(),
+                metadata={
+                    "source": "five_stage_storyboard",
+                    "world_bible": self.stage_data.get(1, {}).get("world_bible", ""),
+                    "character_info": self.stage_data.get(2, {}).get("character_info", ""),
+                    "scenes_analysis": self.stage_data.get(3, {}).get("scenes_analysis", ""),
+                    "optimization_suggestions": self.stage_data.get(5, {}).get("optimization_suggestions", [])
+                }
+            )
+            
+            # 传递给一致性控制面板
+            self.parent_window.consistency_panel.set_storyboard(storyboard_result)
+            
+            logger.info(f"已将 {len(shots)} 个分镜传递给一致性控制面板")
+            
+        except Exception as e:
+            logger.error(f"更新一致性控制面板时发生错误: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    def on_enhance_option_changed(self, state):
+        """增强选项状态改变回调"""
+        try:
+            if self.scene_enhancer:
+                enabled = state == Qt.Checked
+                self.scene_enhancer.update_config(
+                    enable_technical_details=enabled,
+                    enable_consistency_injection=enabled
+                )
+                logger.info(f"场景描述增强已{'启用' if enabled else '禁用'}")
+                
+                # 更新增强级别组合框的可用性
+                self.enhance_level_combo.setEnabled(enabled)
+        except Exception as e:
+            logger.error(f"更新增强选项失败: {e}")
+    
+    def on_enhance_level_changed(self, level_text):
+        """增强级别改变回调"""
+        try:
+            if self.scene_enhancer:
+                level_map = {"低": "low", "中": "medium", "高": "high"}
+                level = level_map.get(level_text, "medium")
+                self.scene_enhancer.update_config(enhancement_level=level)
+                logger.info(f"场景描述增强级别已设置为: {level_text}")
+        except Exception as e:
+            logger.error(f"更新增强级别失败: {e}")
+    
+    def _get_default_style(self):
+        """获取默认风格"""
+        from utils.config_manager import ConfigManager
+        config_manager = ConfigManager()
+        return config_manager.get_setting("default_style", "电影风格")
+    
+    def open_enhancer_config(self):
+        """打开场景描述增强器配置面板"""
+        try:
+            # 获取项目根目录
+            project_root = getattr(self, 'project_dir', None) or os.getcwd()
+            
+            # 创建并显示配置面板
+            config_panel = SceneEnhancerConfigPanel(project_root, self)
+            config_panel.exec_()
+            
+            # 配置面板关闭后，重新加载增强器配置
+            if self.scene_enhancer:
+                self.scene_enhancer.reload_config()
+                logger.info("场景描述增强器配置已更新")
+                
+        except Exception as e:
+            logger.error(f"打开增强器配置面板失败: {e}")
+            QMessageBox.critical(self, "错误", f"打开配置面板失败: {str(e)}")

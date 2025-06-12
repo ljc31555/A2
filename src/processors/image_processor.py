@@ -21,7 +21,7 @@ from processors.text_processor import Shot, StoryboardResult
 class ImageGenerationConfig:
     """图像生成配置"""
     provider: str = "comfyui"
-    style: str = "电影风格"
+    style: str = None
     width: int = 1024
     height: int = 576
     steps: int = 20
@@ -59,10 +59,15 @@ class ImageProcessor:
     def __init__(self, service_manager: ServiceManager, output_dir: str = "output/images"):
         self.service_manager = service_manager
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        # 不自动创建目录，假设目录已存在
         
         # 默认配置
         self.default_config = ImageGenerationConfig()
+        # 如果默认配置中的风格为None，从配置管理器获取
+        if self.default_config.style is None:
+            from utils.config_manager import ConfigManager
+            config_manager = ConfigManager()
+            self.default_config.style = config_manager.get_setting("default_style", "电影风格")
         
         # 风格预设
         self.style_presets = {

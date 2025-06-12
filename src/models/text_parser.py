@@ -25,9 +25,14 @@ STYLE_TEMPLATES = {
 }
 
 class TextParser:
-    def __init__(self, llm_api: LLMApi = None, style: str = '电影风格'):
+    def __init__(self, llm_api: LLMApi = None, style: str = None):
         self.llm_api = llm_api
-        self.style = style if style in STYLE_TEMPLATES else '电影风格'
+        # 如果没有指定风格，从配置中获取默认风格
+        if style is None:
+            from utils.config_manager import ConfigManager
+            config_manager = ConfigManager()
+            style = config_manager.get_setting("default_style", "电影风格")
+        self.style = style if style in STYLE_TEMPLATES else config_manager.get_setting("default_style", "电影风格")
         # 优化：移除NER模型加载，提高启动速度
         self.ner = None
         # 场景和角色词库提升为类属性，便于多处调用

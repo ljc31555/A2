@@ -80,13 +80,19 @@ class AppController:
             logger.error(f"应用关闭失败: {e}")
     
     async def create_video_from_text(self, text: str, 
-                                   style: str = "电影风格",
+                                   style: str = None,
                                    image_config: ImageGenerationConfig = None,
                                    video_config: VideoConfig = None,
                                    providers: Dict[str, str] = None,
                                    progress_callback: Callable = None) -> str:
         """从文本创建视频的完整工作流程"""
         try:
+            # 如果没有指定风格，从配置中获取默认风格
+            if style is None:
+                from utils.config_manager import ConfigManager
+                config_manager = ConfigManager()
+                style = config_manager.get_setting("default_style", "电影风格")
+            
             logger.info("开始文本到视频的完整工作流程")
             
             if providers is None:
@@ -166,11 +172,17 @@ class AppController:
             logger.error(f"文本到视频工作流程失败: {e}")
             raise
     
-    async def generate_storyboard_only(self, text: str, style: str = "电影风格",
+    async def generate_storyboard_only(self, text: str, style: str = None,
                                      provider: str = None,
                                      progress_callback: Callable = None) -> StoryboardResult:
         """仅生成分镜"""
         try:
+            # 如果没有指定风格，从配置中获取默认风格
+            if style is None:
+                from utils.config_manager import ConfigManager
+                config_manager = ConfigManager()
+                style = config_manager.get_setting("default_style", "电影风格")
+            
             logger.info("开始生成分镜")
             
             storyboard = await self.text_processor.parse_text(

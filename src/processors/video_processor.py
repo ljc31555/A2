@@ -82,7 +82,7 @@ class VideoProcessor:
     def __init__(self, service_manager: ServiceManager, output_dir: str = "output/videos"):
         self.service_manager = service_manager
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        # 不自动创建目录，假设目录已存在
         
         # 默认配置
         self.default_config = VideoConfig()
@@ -432,8 +432,12 @@ class VideoProcessor:
             
             # 默认字幕样式
             if subtitle_style is None:
+                from utils.config_manager import ConfigManager
+                config_manager = ConfigManager()
+                default_font = config_manager.get_setting("default_font_family", "Arial")
+                
                 subtitle_style = {
-                    "font_family": "Arial",
+                    "font_family": default_font,
                     "font_size": 24,
                     "font_color": "white",
                     "background_color": "black",

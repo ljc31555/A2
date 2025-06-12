@@ -75,10 +75,16 @@ class TextProcessor:
         
         logger.info("文本处理器初始化完成")
     
-    async def parse_text(self, text: str, style: str = "电影风格", 
+    async def parse_text(self, text: str, style: str = None, 
                         provider: str = None, progress_callback: Callable = None) -> StoryboardResult:
         """解析文本生成分镜"""
         try:
+            # 如果没有指定风格，从配置中获取默认风格
+            if style is None:
+                from utils.config_manager import ConfigManager
+                config_manager = ConfigManager()
+                style = config_manager.get_setting("default_style", "电影风格")
+            
             logger.info(f"开始解析文本，风格: {style}")
             
             # 检查是否已经是分镜格式

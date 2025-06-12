@@ -1,5 +1,5 @@
-import json
 import os
+import json
 
 class ConfigManager:
     def __init__(self, config_dir='f:\\AI2\\AI_Video_Generator\\config'):
@@ -188,6 +188,19 @@ class ConfigManager:
     def get_app_config(self):
         """获取应用配置"""
         return self.app_config
+    
+    def get_llm_config(self):
+        """获取LLM配置"""
+        # 获取第一个启用的模型作为默认LLM配置
+        for model in self.config.get("models", []):
+            if model.get("enabled", True):  # 默认启用
+                return {
+                    "api_type": model.get("type"),
+                    "api_key": model.get("key"),
+                    "api_url": model.get("url"),
+                    "model_name": model.get("model", model.get("name"))
+                }
+        return None
     
     def get_image_providers(self):
         """获取可用的图像生成提供商"""
@@ -399,3 +412,41 @@ class ConfigManager:
             os.makedirs(output_dir, exist_ok=True)
         
         return output_dir
+    
+    def get_setting(self, key, default=None):
+        """获取应用配置项"""
+        config = self.get_app_config()
+        keys = key.split('.')
+        value = config
+        
+        try:
+            for k in keys:
+                value = value[k]
+            return value
+        except (KeyError, TypeError):
+            return default
+    
+    def set_setting(self, key, value):
+        """设置应用配置项"""
+        config = self.get_app_config()
+        keys = key.split('.')
+        
+        # 导航到目标位置
+        current = config
+        for k in keys[:-1]:
+            if k not in current:
+                current[k] = {}
+            current = current[k]
+        
+        # 设置值
+        current[keys[-1]] = value
+        
+        # 保存配置
+        self.app_config = config
+        app_config_path = os.path.join(self.config_json_dir, 'app_config.json')
+        try:
+            os.makedirs(os.path.dirname(app_config_path), exist_ok=True)
+            with open(app_config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error saving app config: {e}")

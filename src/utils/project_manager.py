@@ -550,6 +550,43 @@ class StoryboardProjectManager:
             logger.error(f"添加图片到项目失败: {e}")
             return None
     
+    def save_project(self):
+        """保存当前项目配置"""
+        if not self.current_project:
+            logger.warning("没有当前项目可保存")
+            return False
+        
+        try:
+            project_file = Path(self.current_project["project_dir"]) / "project.json"
+            
+            # 清理和验证项目数据
+            self._clean_project_data(self.current_project)
+            
+            # 更新最后修改时间
+            self.current_project["last_modified"] = datetime.now().isoformat()
+            
+            # 创建备份（如果原文件存在）
+            if project_file.exists():
+                backup_file = project_file.with_suffix('.json.backup')
+                try:
+                    import shutil
+                    shutil.copy2(project_file, backup_file)
+                    logger.info(f"已创建项目配置备份: {backup_file}")
+                except Exception as backup_error:
+                    logger.warning(f"创建备份失败: {backup_error}")
+            
+            with open(project_file, 'w', encoding='utf-8') as f:
+                json.dump(self.current_project, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"项目配置已保存: {project_file}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"保存项目配置失败: {e}")
+            import traceback
+            logger.error(f"详细错误信息: {traceback.format_exc()}")
+            return False
+    
     def _calculate_completion_percentage(self, progress_status: Dict[str, Any]) -> int:
         """计算项目完成百分比"""
         total_steps = 5  # 文本改写、分镜生成、绘图、配音、视频合成
@@ -567,3 +604,90 @@ class StoryboardProjectManager:
             completed_steps += 1
         
         return int((completed_steps / total_steps) * 100)
+    
+    def _clean_project_data(self, project_data):
+        """清理项目数据，移除空的或重复的条目"""
+        try:
+            # 清理五阶段分镜数据
+            if 'five_stage_storyboard' in project_data:
+                five_stage_data = project_data['five_stage_storyboard']
+                
+                # 验证五阶段数据结构
+                if not isinstance(five_stage_data, dict):
+                    logger.warning("五阶段数据格式错误，重新初始化")
+                    project_data['five_stage_storyboard'] = {
+                        'stage_data': {1: {}, 2: {}, 3: {}, 4: {}, 5: {}},
+                        'current_stage': 1,
+                        'selected_characters': [],
+                        'selected_scenes': [],
+                        'article_text': '',
+                        'selected_style': '电影风格',
+                        'selected_model': ''
+                    }
+                    return
+                
+                # 确保必要的字段存在
+                required_fields = {
+                    'stage_data': {1: {}, 2: {}, 3: {}, 4: {}, 5: {}},
+                    'current_stage': 1,
+                    'selected_characters': [],
+                    'selected_scenes': [],
+                    'article_text': '',
+                    'selected_style': '电影风格',
+                    'selected_model': ''
+                }
+                
+                for field, default_value in required_fields.items():
+                    if field not in five_stage_data:
+                        five_stage_data[field] = default_value
+                        logger.info(f"添加缺失的五阶段字段: {field}")
+                
+                # 清理空的阶段数据
+                if 'stage_data' in five_stage_data:
+                    stage_data = five_stage_data['stage_data']
+                    if not isinstance(stage_data, dict):
+                        five_stage_data['stage_data'] = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}}
+                    else:
+                        # 确保所有阶段都存在
+                        for stage_num in range(1, 6):
+                            if stage_num not in stage_data:
+                                stage_data[stage_num] = {}
+                        
+                        # 清理无效的阶段数据
+                        for stage_num in list(stage_data.keys()):
+                            if not isinstance(stage_data[stage_num], dict):
+                                stage_data[stage_num] = {}
+                
+                # 验证当前阶段
+                current_stage = five_stage_data.get('current_stage', 1)
+                if not isinstance(current_stage, int) or current_stage < 1 or current_stage > 5:
+                    five_stage_data['current_stage'] = 1
+                    logger.warning("当前阶段值无效，重置为1")
+                
+                # 清理重复的世界观数据
+                if 'stage_data' in five_stage_data and 1 in five_stage_data['stage_data']:
+                    world_bible = five_stage_data['stage_data'][1].get('world_bible', '')
+                    if world_bible and isinstance(world_bible, str):
+                        # 如果有重复的世界观数据，保留最新的
+                        project_data['world_bible'] = world_bible
+                
+                # 清理重复的分镜结果
+                if 'stage_data' in five_stage_data and 4 in five_stage_data['stage_data']:
+                    storyboard_results = five_stage_data['stage_data'][4].get('storyboard_results', [])
+                    if storyboard_results and isinstance(storyboard_results, list):
+                        project_data['storyboard_results'] = storyboard_results
+            
+            # 验证其他项目数据
+            if 'files' not in project_data:
+                project_data['files'] = {}
+            
+            if 'name' not in project_data:
+                project_data['name'] = 'Unnamed Project'
+                logger.warning("项目名称缺失，使用默认名称")
+            
+            logger.info("项目数据清理和验证完成")
+            
+        except Exception as e:
+            logger.error(f"清理项目数据时出错: {e}")
+            import traceback
+            logger.error(f"详细错误信息: {traceback.format_exc()}")
