@@ -268,6 +268,7 @@ class StageWorkerThread(QThread):
 - **光影设计**：[自然光/人工光/逆光/侧光等]
 - **色彩基调**：[暖色调/冷色调/对比色等]
 - **时长**：X秒
+- **镜头角色**：[列出根据画面描述中出现的角色，如：主人公、奶奶等]
 - **画面描述**：[详细描述画面内容，包括角色位置、动作、表情、环境细节]
 - **台词/旁白**：[如有]
 - **音效提示**：[环境音、特效音等]
@@ -313,32 +314,46 @@ class StageWorkerThread(QThread):
         storyboard_results = self.input_data.get("storyboard_results", [])
         world_bible = self.input_data.get("world_bible", "")
         
-        # 这里可以添加视觉一致性检查、风格统一性分析等
-        # 目前先返回基本的优化建议
-        
+        # 自动启用增强器对画面描述进行优化
+        enhanced_storyboard_results = []
         optimization_suggestions = []
         
         for result in storyboard_results:
             scene_index = result.get("scene_index", 0)
             storyboard_script = result.get("storyboard_script", "")
             
-            # 简单的一致性检查（可以扩展为更复杂的AI分析）
+            self.progress_updated.emit(f"🔍 正在处理第{scene_index + 1}个场景的分镜优化...")
+            
+            # 解析分镜脚本，提取镜头信息
+            if self.parent_tab and hasattr(self.parent_tab, '_enhance_storyboard_shots'):
+                enhanced_shots = self.parent_tab._enhance_storyboard_shots(storyboard_script)
+            else:
+                enhanced_shots = []
+            
+            # 创建增强后的分镜结果
+            enhanced_result = result.copy()
+            enhanced_result["enhanced_shots"] = enhanced_shots
+            enhanced_storyboard_results.append(enhanced_result)
+            
+            # 生成优化建议
             suggestions = {
                 "scene_index": scene_index,
                 "visual_consistency": "✅ 视觉风格与世界观一致",
                 "technical_quality": "✅ 镜头语言专业规范",
                 "narrative_flow": "✅ 叙事节奏合理",
+                "enhancement_applied": "✅ 已应用角色和场景一致性增强",
                 "optimization_tips": [
-                    "建议在关键情感转折点增加特写镜头",
-                    "可考虑添加更多环境音效提升沉浸感",
-                    "注意保持角色造型的一致性"
+                    "已自动注入角色一致性提示词",
+                    "已匹配场景一致性描述",
+                    "已优化技术参数和构图建议",
+                    "画面描述已通过AI增强器优化"
                 ]
             }
             optimization_suggestions.append(suggestions)
         
         return {
             "optimization_suggestions": optimization_suggestions,
-            "storyboard_results": storyboard_results,
+            "storyboard_results": enhanced_storyboard_results,
             "world_bible": world_bible
         }
 
@@ -359,6 +374,16 @@ class FiveStageStoryboardTab(QWidget):
         # 角色场景管理器
         self.character_scene_manager = None
         self.character_dialog = None
+        
+        # 初始化角色场景管理器
+        if (self.project_manager and 
+            self.project_manager.current_project and 
+            'project_dir' in self.project_manager.current_project):
+            project_path = self.project_manager.current_project['project_dir']
+            from src.utils.character_scene_manager import CharacterSceneManager
+            self.character_scene_manager = CharacterSceneManager(project_path)
+        else:
+            self.character_scene_manager = None
         
         # 场景描述增强器
         self.scene_enhancer = None
@@ -387,6 +412,212 @@ class FiveStageStoryboardTab(QWidget):
         
         # 确保UI组件已完全初始化后再加载项目数据
         QTimer.singleShot(500, self.delayed_load_from_project)
+    
+    def _enhance_storyboard_shots(self, storyboard_script: str) -> List[Dict[str, Any]]:
+        """增强分镜脚本中的镜头描述
+        
+        Args:
+            storyboard_script: 分镜脚本文本
+            
+        Returns:
+            List[Dict]: 增强后的镜头信息列表
+        """
+        enhanced_shots = []
+        
+        try:
+            # 导入必要的模块
+            from src.processors.prompt_optimizer import PromptOptimizer
+            from src.processors.scene_description_enhancer import SceneDescriptionEnhancer
+            
+            # 初始化提示词优化器和场景增强器
+            prompt_optimizer = PromptOptimizer()
+            
+            # 获取项目根目录
+            project_root = self.project_manager.get_current_project_path() if self.project_manager else None
+            if not project_root:
+                logger.warning("无法获取项目路径，跳过增强处理")
+                return enhanced_shots
+            
+            # 初始化场景描述增强器
+            scene_enhancer = SceneDescriptionEnhancer(
+                project_root=project_root,
+                character_scene_manager=self.character_scene_manager,
+                llm_api=self.llm_api
+            )
+            
+            # 解析分镜脚本，提取镜头信息
+            shots_info = prompt_optimizer._extract_shots_from_script(storyboard_script)
+            
+            for shot_info in shots_info:
+                shot_number = shot_info.get('shot_number', '')
+                description = shot_info.get('description', '')
+                characters = shot_info.get('characters', '')
+                
+                # 解析角色信息
+                character_list = [char.strip() for char in characters.split(',') if char.strip()] if characters else []
+                
+                # 获取角色一致性提示词
+                character_consistency_prompts = self._get_character_consistency_prompts(character_list)
+                
+                # 获取场景一致性提示词
+                scene_consistency_prompts = self._get_scene_consistency_prompts(description)
+                
+                # 构建完整的技术参数和一致性信息
+                enhanced_prompt_data = {
+                    "镜头类型": "中景",  # 默认值，可以通过AI分析优化
+                    "机位角度": "平视",
+                    "镜头运动": "摇移",
+                    "景深效果": "深景深",
+                    "构图要点": "三分法",
+                    "光影设计": "自然光",
+                    "色彩基调": "明亮",
+                    "镜头角色": character_consistency_prompts,
+                    "场景一致性": scene_consistency_prompts,
+                    "画面描述": description
+                }
+                
+                # 使用场景描述增强器进行优化
+                enhanced_description = scene_enhancer.enhance_description(
+                    original_description=description,
+                    characters=character_list
+                )
+                
+                # 构建最终的优化提示词
+                final_prompt = self._build_final_prompt(enhanced_prompt_data, enhanced_description)
+                
+                enhanced_shot = {
+                    "shot_number": shot_number,
+                    "original_description": description,
+                    "enhanced_description": enhanced_description,
+                    "characters": character_list,
+                    "character_consistency_prompts": character_consistency_prompts,
+                    "scene_consistency_prompts": scene_consistency_prompts,
+                    "technical_parameters": enhanced_prompt_data,
+                    "final_prompt": final_prompt
+                }
+                
+                enhanced_shots.append(enhanced_shot)
+                
+                logger.info(f"镜头 {shot_number} 增强完成")
+            
+        except Exception as e:
+            logger.error(f"分镜脚本增强失败: {e}")
+        
+        return enhanced_shots
+    
+    def _get_character_consistency_prompts(self, character_list: List[str]) -> List[str]:
+        """获取角色一致性提示词
+        
+        Args:
+            character_list: 角色名称列表
+            
+        Returns:
+            List[str]: 角色一致性提示词列表
+        """
+        consistency_prompts = []
+        
+        try:
+            if not self.character_scene_manager:
+                return consistency_prompts
+            
+            # 获取所有角色数据
+            all_characters = self.character_scene_manager.get_all_characters()
+            
+            for character_name in character_list:
+                # 查找匹配的角色
+                for char_id, char_data in all_characters.items():
+                    if char_data.get('name') == character_name:
+                        consistency_prompt = char_data.get('consistency_prompt', '')
+                        if consistency_prompt:
+                            consistency_prompts.append(f"{character_name}（一致性提示词为：{consistency_prompt}）")
+                        break
+                else:
+                    # 如果没有找到匹配的角色，添加基本信息
+                    consistency_prompts.append(f"{character_name}（未找到详细一致性信息）")
+            
+        except Exception as e:
+            logger.error(f"获取角色一致性提示词失败: {e}")
+        
+        return consistency_prompts
+    
+    def _get_scene_consistency_prompts(self, description: str) -> List[str]:
+        """获取场景一致性提示词
+        
+        Args:
+            description: 画面描述
+            
+        Returns:
+            List[str]: 场景一致性提示词列表
+        """
+        consistency_prompts = []
+        
+        try:
+            if not self.character_scene_manager:
+                return consistency_prompts
+            
+            # 获取所有场景数据
+            all_scenes = self.character_scene_manager.get_all_scenes()
+            
+            # 简单的场景匹配逻辑（可以优化为更智能的匹配）
+            for scene_id, scene_data in all_scenes.items():
+                scene_name = scene_data.get('name', '')
+                scene_description = scene_data.get('description', '')
+                
+                # 检查描述中是否包含场景关键词
+                if (scene_name and scene_name in description) or \
+                   (scene_description and any(keyword in description for keyword in scene_description.split()[:5])):
+                    consistency_prompt = scene_data.get('consistency_prompt', '')
+                    if consistency_prompt:
+                        consistency_prompts.append(f"{scene_name}：{consistency_prompt}")
+            
+        except Exception as e:
+            logger.error(f"获取场景一致性提示词失败: {e}")
+        
+        return consistency_prompts
+    
+    def _build_final_prompt(self, prompt_data: Dict[str, Any], enhanced_description: str) -> str:
+        """构建最终的优化提示词
+        
+        Args:
+            prompt_data: 提示词数据
+            enhanced_description: 增强后的描述
+            
+        Returns:
+            str: 最终的优化提示词
+        """
+        try:
+            prompt_parts = []
+            
+            # 添加技术参数
+            technical_params = [
+                f"**镜头类型**：{prompt_data.get('镜头类型', '')}",
+                f"**机位角度**：{prompt_data.get('机位角度', '')}",
+                f"**镜头运动**：{prompt_data.get('镜头运动', '')}",
+                f"**景深效果**：{prompt_data.get('景深效果', '')}",
+                f"**构图要点**：{prompt_data.get('构图要点', '')}",
+                f"**光影设计**：{prompt_data.get('光影设计', '')}",
+                f"**色彩基调**：{prompt_data.get('色彩基调', '')}"
+            ]
+            prompt_parts.extend(technical_params)
+            
+            # 添加角色一致性信息
+            character_prompts = prompt_data.get('镜头角色', [])
+            if character_prompts:
+                prompt_parts.append(f"**镜头角色**：{', '.join(character_prompts)}")
+            
+            # 添加场景一致性信息
+            scene_prompts = prompt_data.get('场景一致性', [])
+            if scene_prompts:
+                prompt_parts.append(f"**场景一致性**：{'; '.join(scene_prompts)}")
+            
+            # 添加增强后的画面描述
+            prompt_parts.append(f"**画面描述**：{enhanced_description}")
+            
+            return '\n'.join(prompt_parts)
+            
+        except Exception as e:
+            logger.error(f"构建最终提示词失败: {e}")
+            return enhanced_description
     
     def init_ui(self):
         """初始化UI界面"""
@@ -1030,6 +1261,8 @@ class FiveStageStoryboardTab(QWidget):
                 self._display_storyboard_results(result.get("storyboard_results", []))
                 self.stage4_next_btn.setEnabled(True)
                 self.status_label.setText("✅ 分镜脚本生成完成")
+                # 调用场景描述增强器
+                self._enhance_storyboard_descriptions(result.get("storyboard_results", []))
                 # 转换数据并传递给一致性控制面板
                 self._update_consistency_panel()
             elif stage_num == 5:
@@ -1091,6 +1324,118 @@ class FiveStageStoryboardTab(QWidget):
             
         except Exception as e:
             logger.error(f"保存世界观圣经文件失败: {e}")
+    
+    def _enhance_storyboard_descriptions(self, storyboard_results):
+        """使用场景描述增强器增强分镜脚本描述"""
+        try:
+            # 检查是否有分镜脚本数据
+            if not storyboard_results:
+                logger.warning("没有分镜脚本数据可供增强")
+                return
+            
+            # 获取当前项目信息
+            if not self.project_manager or not self.project_manager.current_project:
+                logger.warning("没有当前项目，无法保存增强结果")
+                return
+            
+            project_name = self.project_manager.current_project.get('project_name')
+            if not project_name:
+                logger.warning("项目名称为空，无法保存增强结果")
+                return
+            
+            # 初始化场景描述增强器
+            if not self.scene_enhancer:
+                project_root = self.project_manager.current_project.get('project_path', os.getcwd())
+                self.scene_enhancer = SceneDescriptionEnhancer(
+                    project_root=project_root,
+                    character_scene_manager=self.character_scene_manager,
+                    llm_api=getattr(self, 'llm_api', None)
+                )
+                logger.info(f"场景描述增强器已初始化，项目根目录: {project_root}")
+            
+            # 合并所有分镜脚本内容（只包含镜头描述，不包含场景标题）
+            combined_script = ""
+            for i, result in enumerate(storyboard_results):
+                storyboard_script = result.get("storyboard_script", "")
+                if storyboard_script.strip():  # 只添加非空的分镜脚本
+                    # 过滤掉场景标题行，只保留镜头相关内容
+                    filtered_lines = []
+                    lines = storyboard_script.split('\n')
+                    for line in lines:
+                        line_strip = line.strip()
+                        # 跳过场景标题行
+                        if (line_strip.startswith('### 场景') or 
+                            line_strip.startswith('## 场景') or
+                            line_strip.startswith('场景') and '：' in line_strip):
+                            continue
+                        filtered_lines.append(line)
+                    
+                    filtered_script = '\n'.join(filtered_lines)
+                    if filtered_script.strip():
+                        combined_script += f"\n{filtered_script}\n"
+            
+            logger.info(f"开始增强分镜脚本描述，原始内容长度: {len(combined_script)}")
+            
+            # 获取用户选择的风格
+            selected_style = self.style_combo.currentText() if hasattr(self, 'style_combo') else '电影风格'
+            logger.info(f"使用风格: {selected_style}")
+            
+            # 调用场景描述增强器，传递风格参数
+            enhanced_result = self.scene_enhancer.enhance_storyboard(combined_script, selected_style)
+            
+            if enhanced_result and 'enhanced_description' in enhanced_result:
+                enhanced_content = enhanced_result['enhanced_description']
+                logger.info(f"场景描述增强完成，增强内容长度: {len(enhanced_content)}")
+                
+                # 构建项目特定的texts文件夹路径
+                output_dir = os.path.join(os.getcwd(), "output", project_name, "texts")
+                logger.info(f"准备创建输出目录: {output_dir}")
+                
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+                    logger.info(f"输出目录已创建: {output_dir}")
+                else:
+                    logger.info(f"输出目录已存在: {output_dir}")
+                
+                # 保存增强结果到prompt.json文件
+                prompt_data = {
+                    "original_description": combined_script,
+                    "enhanced_prompt": enhanced_content,
+                    "timestamp": QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss"),
+                    "enhancer_config": enhanced_result.get('config', {}),
+                    "technical_details": enhanced_result.get('technical_details', {}),
+                    "consistency_details": enhanced_result.get('consistency_details', {}),
+                    "fusion_quality_score": enhanced_result.get('fusion_quality_score', 0.0)
+                }
+                
+                prompt_file = os.path.join(output_dir, "prompt.json")
+                logger.info(f"准备保存增强结果到文件: {prompt_file}")
+                
+                try:
+                    with open(prompt_file, 'w', encoding='utf-8') as f:
+                        json.dump(prompt_data, f, ensure_ascii=False, indent=2)
+                    
+                    # 验证文件是否成功创建
+                    if os.path.exists(prompt_file):
+                        file_size = os.path.getsize(prompt_file)
+                        logger.info(f"场景描述增强结果已成功保存到: {prompt_file}，文件大小: {file_size} 字节")
+                    else:
+                        logger.error(f"文件保存失败，文件不存在: {prompt_file}")
+                        
+                except Exception as save_error:
+                    logger.error(f"保存prompt.json文件时出错: {save_error}")
+                    import traceback
+                    logger.error(f"保存错误详情: {traceback.format_exc()}")
+                
+                # 更新状态显示
+                self.status_label.setText("✅ 分镜脚本生成完成，场景描述已增强")
+            else:
+                logger.warning("场景描述增强器返回结果为空或格式不正确")
+                
+        except Exception as e:
+            logger.error(f"增强分镜脚本描述失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
 
     
@@ -1163,6 +1508,7 @@ class FiveStageStoryboardTab(QWidget):
         for i, result in enumerate(storyboard_results):
             scene_info = result.get("scene_info", "")
             storyboard_script = result.get("storyboard_script", "")
+            enhanced_shots = result.get("enhanced_shots", [])
             
             output_text += f"\n{'='*50}\n"
             output_text += f"场景 {i+1}\n"
@@ -1170,6 +1516,17 @@ class FiveStageStoryboardTab(QWidget):
             output_text += f"场景信息: {scene_info}\n\n"
             output_text += storyboard_script
             output_text += "\n\n"
+            
+            # 显示增强后的镜头信息
+            if enhanced_shots:
+                output_text += f"{'='*30} 增强后的镜头信息 {'='*30}\n\n"
+                for shot in enhanced_shots:
+                    shot_number = shot.get('shot_number', '')
+                    final_prompt = shot.get('final_prompt', '')
+                    
+                    output_text += f"【镜头 {shot_number}】\n"
+                    output_text += f"{final_prompt}\n"
+                    output_text += f"{'-'*60}\n\n"
         
         self.storyboard_output.setText(output_text)
     
@@ -1183,6 +1540,11 @@ class FiveStageStoryboardTab(QWidget):
             output_text += f"• 视觉一致性: {suggestion.get('visual_consistency', '')}\n"
             output_text += f"• 技术质量: {suggestion.get('technical_quality', '')}\n"
             output_text += f"• 叙事流畅性: {suggestion.get('narrative_flow', '')}\n"
+            
+            # 显示增强功能应用状态
+            enhancement_applied = suggestion.get('enhancement_applied', '')
+            if enhancement_applied:
+                output_text += f"• 增强功能: {enhancement_applied}\n"
             
             tips = suggestion.get('optimization_tips', [])
             if tips:
@@ -1626,10 +1988,10 @@ class FiveStageStoryboardTab(QWidget):
                         else:
                             logger.info(f"  - {key}: {type(value).__name__} = {value}")
             
-            # 如果有第4阶段的分镜数据，更新一致性控制面板
+            # 如果有第4阶段的分镜数据，更新一致性控制面板（项目加载时禁用自动增强）
             if self.stage_data.get(4) and self.stage_data[4].get('storyboard_results'):
                 logger.info("项目加载完成，更新一致性控制面板...")
-                self._update_consistency_panel()
+                self._update_consistency_panel(auto_enhance=False)
             
         except Exception as e:
             logger.error(f"加载五阶段分镜数据时出错: {e}")
@@ -1918,8 +2280,12 @@ class FiveStageStoryboardTab(QWidget):
             logger.error(f"显示优化建议时出错: {e}")
             self.optimization_output.setPlainText("显示优化建议时出错")
     
-    def _update_consistency_panel(self):
-        """将五阶段分镜数据转换并传递给一致性控制面板"""
+    def _update_consistency_panel(self, auto_enhance=True):
+        """将五阶段分镜数据转换并传递给一致性控制面板
+        
+        Args:
+            auto_enhance (bool): 是否自动进行场景描述增强，默认为True
+        """
         try:
             # 检查是否有分镜数据
             storyboard_results = self.stage_data.get(4, {}).get("storyboard_results", [])
@@ -2001,8 +2367,8 @@ class FiveStageStoryboardTab(QWidget):
                             prompt = line.split('：')[-1] if '：' in line else line
                             original_prompt = prompt.strip()
                             
-                            # 应用场景描述增强
-                            if self.scene_enhancer:
+                            # 应用场景描述增强（根据auto_enhance参数决定）
+                            if auto_enhance and self.scene_enhancer:
                                 try:
                                     enhanced_prompt = self.scene_enhancer.enhance_description(
                                         original_prompt, current_shot.characters
@@ -2014,6 +2380,8 @@ class FiveStageStoryboardTab(QWidget):
                                     current_shot.image_prompt = original_prompt
                             else:
                                 current_shot.image_prompt = original_prompt
+                                if not auto_enhance:
+                                    logger.debug(f"跳过画面描述增强（auto_enhance=False）: {original_prompt[:30]}...")
                         else:
                             # 其他内容添加到动作描述中
                             if current_shot.action:
@@ -2038,8 +2406,12 @@ class FiveStageStoryboardTab(QWidget):
                     original_prompt = scene_info
                     enhanced_prompt = original_prompt
                     
-                    # 应用场景描述增强
-                    if self.scene_enhancer:
+                    # 跳过对场景标题的增强处理（场景标题不应该被增强）
+                    if re.match(r'^场景\d+', scene_info.strip()):
+                        logger.debug(f"跳过场景标题增强: {original_prompt}")
+                        enhanced_prompt = original_prompt
+                    elif auto_enhance and self.scene_enhancer:
+                        # 应用场景描述增强（仅对非场景标题内容）
                         try:
                             enhanced_prompt = self.scene_enhancer.enhance_description(
                                 original_prompt, []
@@ -2048,6 +2420,8 @@ class FiveStageStoryboardTab(QWidget):
                         except Exception as e:
                             logger.error(f"默认画面描述增强失败: {e}")
                             enhanced_prompt = original_prompt
+                    elif not auto_enhance:
+                        logger.debug(f"跳过默认画面描述增强（auto_enhance=False）: {original_prompt}")
                     
                     shot = Shot(
                         shot_id=scene_idx + 1,

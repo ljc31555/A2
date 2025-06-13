@@ -52,10 +52,15 @@ temp/
 config/app_settings.json
 config/llm_config.json
 config/tts_config.json
+config/config.json/
 *.key
 *.secret
 config/*_config.json
 config/baidu_translate_config.py
+
+# 确保所有包含实际API密钥的文件都被排除
+config/config.json/*_config.json
+config/tts_config.json
 
 # 模型文件
 *.ckpt

@@ -2036,9 +2036,19 @@ class NewMainWindow(QMainWindow):
                 # 强制重新加载角色场景数据（不检查cs_manager状态）
                 self.consistency_panel.load_character_scene_data()
                 
-                # 如果有五阶段数据，传递给一致性面板
+                # 如果有五阶段数据，传递给一致性面板（项目加载时禁用自动增强）
                 if hasattr(self, 'five_stage_storyboard_tab') and self.five_stage_storyboard_tab:
-                    self.five_stage_storyboard_tab._update_consistency_panel()
+                    # 项目加载时不自动进行场景描述增强，避免重复处理
+                    if hasattr(self.five_stage_storyboard_tab, '_update_consistency_panel'):
+                        # 检查方法是否支持auto_enhance参数
+                        import inspect
+                        sig = inspect.signature(self.five_stage_storyboard_tab._update_consistency_panel)
+                        if 'auto_enhance' in sig.parameters:
+                            self.five_stage_storyboard_tab._update_consistency_panel(auto_enhance=False)
+                        else:
+                            self.five_stage_storyboard_tab._update_consistency_panel()
+                    else:
+                        logger.warning("五阶段分镜标签页缺少_update_consistency_panel方法")
                 
                 logger.info("一致性控制面板数据更新完成")
         except Exception as e:

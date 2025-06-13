@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QIcon
 from utils.logger import logger
+from utils.color_optimizer import ColorOptimizer
 
 class CharacterSceneDialog(QDialog):
     """角色场景设置对话框"""
@@ -26,6 +27,9 @@ class CharacterSceneDialog(QDialog):
         self.parent_window = parent
         self.current_character_id = None
         self.current_scene_id = None
+        
+        # 初始化颜色优化器
+        self.color_optimizer = ColorOptimizer()
         
         self.init_ui()
         self.load_data()
@@ -177,8 +181,27 @@ class CharacterSceneDialog(QDialog):
         self.char_clothing_colors_edit = QLineEdit()
         self.char_accessories_edit = QLineEdit()
         
+        # 为颜色输入框添加提示文本和自动优化功能
+        self.char_clothing_colors_edit.setPlaceholderText("输入颜色，多个颜色用逗号分隔（系统会自动选择主要颜色）")
+        # 当输入框失去焦点时自动优化颜色
+        self.char_clothing_colors_edit.editingFinished.connect(self.auto_optimize_colors)
+        
         clothing_layout.addRow("服装风格:", self.char_clothing_style_edit)
-        clothing_layout.addRow("主要颜色:", self.char_clothing_colors_edit)
+        
+        # 颜色输入框和优化按钮的水平布局
+        color_layout = QHBoxLayout()
+        color_layout.addWidget(self.char_clothing_colors_edit)
+        
+        self.optimize_color_btn = QPushButton("优化颜色")
+        self.optimize_color_btn.setMaximumWidth(80)
+        self.optimize_color_btn.clicked.connect(self.optimize_character_colors)
+        self.optimize_color_btn.setToolTip("从多个颜色中自动选择主要颜色")
+        color_layout.addWidget(self.optimize_color_btn)
+        
+        color_widget = QWidget()
+        color_widget.setLayout(color_layout)
+        clothing_layout.addRow("主要颜色:", color_widget)
+        
         clothing_layout.addRow("配饰:", self.char_accessories_edit)
         
         right_layout.addWidget(clothing_group)
@@ -615,7 +638,38 @@ class CharacterSceneDialog(QDialog):
             # 服装信息
             clothing = char_data.get('clothing', {})
             self.char_clothing_style_edit.setText(clothing.get('style', ''))
-            self.char_clothing_colors_edit.setText(', '.join(clothing.get('colors', [])))
+            
+            # 颜色信息处理 - 自动优化为单一主要颜色
+            colors = clothing.get('colors', [])
+            if colors:
+                if len(colors) > 1:
+                    # 如果有多个颜色，自动选择主要颜色
+                    color_text = ', '.join(colors)
+                    primary_color = self.color_optimizer.extract_primary_color(color_text)
+                    if primary_color:
+                        self.char_clothing_colors_edit.setText(primary_color)
+                        # 自动更新角色数据中的颜色
+                        char_data['clothing']['colors'] = [primary_color]
+                        
+                        # 同步更新一致性提示词中的颜色描述
+                        consistency_prompt = char_data.get('consistency_prompt', '')
+                        if consistency_prompt:
+                            # 使用颜色优化器更新一致性提示词中的颜色描述
+                            updated_prompt = self.color_optimizer.apply_color_consistency_to_description(
+                                consistency_prompt, char_data.get('name', ''), primary_color
+                            )
+                            char_data['consistency_prompt'] = updated_prompt
+                            logger.info(f"同步更新一致性提示词: {consistency_prompt} -> {updated_prompt}")
+                        
+                        self.character_scene_manager.save_character(char_id, char_data)
+                        logger.info(f"自动优化角色 {char_data.get('name', '')} 的颜色: {color_text} -> {primary_color}")
+                    else:
+                        self.char_clothing_colors_edit.setText(', '.join(colors))
+                else:
+                    self.char_clothing_colors_edit.setText(colors[0])
+            else:
+                self.char_clothing_colors_edit.setText('')
+            
             self.char_accessories_edit.setText(', '.join(clothing.get('accessories', [])))
             
             # 一致性提示词
@@ -768,6 +822,59 @@ class CharacterSceneDialog(QDialog):
                     self.load_consistency_selection()
                     self.clear_scene_details()
     
+    def auto_optimize_colors(self):
+        """自动优化颜色 - 当输入框失去焦点时自动执行"""
+        try:
+            color_text = self.char_clothing_colors_edit.text().strip()
+            if not color_text:
+                return
+            
+            # 检查是否包含多个颜色（包含逗号或多个颜色词）
+            if ',' in color_text or len([c for c in color_text.split() if any(color in c for color in self.color_optimizer.color_priority.keys())]) > 1:
+                # 提取主要颜色
+                primary_color = self.color_optimizer.extract_primary_color(color_text)
+                
+                if primary_color and primary_color != color_text:
+                    self.char_clothing_colors_edit.setText(primary_color)
+                    
+                    # 同步更新一致性提示词
+                    consistency_text = self.char_consistency_edit.toPlainText()
+                    if consistency_text and self.current_character_id:
+                        char_data = self.character_scene_manager.get_character(self.current_character_id)
+                        if char_data:
+                            updated_prompt = self.color_optimizer.apply_color_consistency_to_description(
+                                consistency_text, char_data.get('name', ''), primary_color
+                            )
+                            self.char_consistency_edit.setText(updated_prompt)
+                            logger.info(f"自动优化时同步更新一致性提示词")
+                    
+                    # 静默优化，不显示消息框
+                    logger.info(f"自动优化颜色: {color_text} -> {primary_color}")
+                    
+        except Exception as e:
+            logger.error(f"自动颜色优化失败: {e}")
+    
+    def optimize_character_colors(self):
+        """手动优化角色颜色"""
+        try:
+            color_text = self.char_clothing_colors_edit.text().strip()
+            if not color_text:
+                QMessageBox.information(self, "提示", "请先输入颜色信息")
+                return
+            
+            # 提取主要颜色
+            primary_color = self.color_optimizer.extract_primary_color(color_text)
+            
+            if primary_color:
+                self.char_clothing_colors_edit.setText(primary_color)
+                QMessageBox.information(self, "颜色优化完成", f"已将主要颜色设置为: {primary_color}")
+            else:
+                QMessageBox.warning(self, "优化失败", "无法识别有效的颜色信息")
+                
+        except Exception as e:
+            logger.error(f"颜色优化失败: {e}")
+            QMessageBox.critical(self, "错误", f"颜色优化失败: {str(e)}")
+    
     def save_current_character(self):
         """保存当前编辑的角色"""
         if not self.current_character_id:
@@ -775,6 +882,7 @@ class CharacterSceneDialog(QDialog):
             return
         
         try:
+            # 构建角色数据
             char_data = {
                 "name": self.char_name_edit.text(),
                 "description": self.char_description_edit.toPlainText(),
@@ -795,6 +903,22 @@ class CharacterSceneDialog(QDialog):
                 "manual_edited": True
             }
             
+            # 自动优化颜色（确保只有一个主要颜色）
+            original_colors = char_data.get('clothing', {}).get('colors', [])
+            char_data = self.color_optimizer.optimize_character_colors(char_data)
+            optimized_colors = char_data.get('clothing', {}).get('colors', [])
+            
+            # 如果颜色发生了变化，同步更新一致性提示词
+            if original_colors != optimized_colors and optimized_colors:
+                primary_color = optimized_colors[0]
+                consistency_prompt = char_data.get('consistency_prompt', '')
+                if consistency_prompt:
+                    updated_prompt = self.color_optimizer.apply_color_consistency_to_description(
+                        consistency_prompt, char_data.get('name', ''), primary_color
+                    )
+                    char_data['consistency_prompt'] = updated_prompt
+                    logger.info(f"保存时同步更新一致性提示词: {consistency_prompt} -> {updated_prompt}")
+            
             # 保留原有的其他字段
             original_data = self.character_scene_manager.get_character(self.current_character_id)
             if original_data:
@@ -807,9 +931,17 @@ class CharacterSceneDialog(QDialog):
             self.load_characters()
             self.load_consistency_selection()
             
-            QMessageBox.information(self, "成功", "角色信息已保存")
+            # 显示优化后的颜色信息
+            optimized_colors = char_data.get('clothing', {}).get('colors', [])
+            if optimized_colors:
+                color_info = f"角色信息已保存\n主要服装颜色: {optimized_colors[0]}"
+            else:
+                color_info = "角色信息已保存"
+            
+            QMessageBox.information(self, "成功", color_info)
             
         except Exception as e:
+            logger.error(f"保存角色失败: {e}")
             QMessageBox.critical(self, "错误", f"保存角色失败: {str(e)}")
     
     def save_current_scene(self):

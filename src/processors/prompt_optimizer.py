@@ -487,7 +487,7 @@ class PromptOptimizer:
         
         return cleaned_text, english_text
     
-    def extract_shots_from_script(self, storyboard_script: str, scene_info: Dict) -> List[Tuple[str, str]]:
+    def extract_shots_from_script(self, storyboard_script: str, scene_info: Dict) -> List[Dict]:
         """
         从分镜脚本中提取镜头信息
         
@@ -496,13 +496,14 @@ class PromptOptimizer:
             scene_info: 场景信息
             
         Returns:
-            List[Tuple[str, str]]: 镜头信息列表，每个元素为(镜头编号, 画面描述)
+            List[Dict]: 镜头信息列表，每个元素包含镜头编号、画面描述和角色信息
         """
         try:
             shots_with_prompts = []
             lines = storyboard_script.split('\n')
             current_shot = None
             current_description = ""
+            current_characters = ""
             
             for line in lines:
                 line = line.strip()
@@ -511,7 +512,15 @@ class PromptOptimizer:
                 if line.startswith('### 镜头') or line.startswith('##镜头') or '镜头' in line and line.endswith('###'):
                     # 保存上一个镜头的信息
                     if current_shot and current_description:
-                        shots_with_prompts.append((current_shot, current_description.strip()))
+                        # 如果没有明确的镜头角色，从画面描述中提取
+                        if not current_characters:
+                            current_characters = self._extract_characters_from_description(current_description)
+                        
+                        shots_with_prompts.append({
+                            'shot_number': current_shot,
+                            'description': current_description.strip(),
+                            'characters': current_characters
+                        })
                     
                     # 提取镜头编号
                     import re
@@ -519,6 +528,13 @@ class PromptOptimizer:
                     if shot_match:
                         current_shot = shot_match.group(1)
                         current_description = ""
+                        current_characters = ""
+                
+                # 检测镜头角色
+                elif line.startswith('- **镜头角色**：') or line.startswith('**镜头角色**：'):
+                    current_characters = line.replace('- **镜头角色**：', '').replace('**镜头角色**：', '').strip()
+                elif line.startswith('- **镜头角色**:') or line.startswith('**镜头角色**:'):
+                    current_characters = line.replace('- **镜头角色**:', '').replace('**镜头角色**:', '').strip()
                 
                 # 检测画面描述
                 elif line.startswith('- **画面描述**：') or line.startswith('**画面描述**：'):
@@ -528,7 +544,15 @@ class PromptOptimizer:
             
             # 保存最后一个镜头的信息
             if current_shot and current_description:
-                shots_with_prompts.append((current_shot, current_description.strip()))
+                # 如果没有明确的镜头角色，从画面描述中提取
+                if not current_characters:
+                    current_characters = self._extract_characters_from_description(current_description)
+                
+                shots_with_prompts.append({
+                    'shot_number': current_shot,
+                    'description': current_description.strip(),
+                    'characters': current_characters
+                })
             
             logger.info(f"从分镜脚本中提取到 {len(shots_with_prompts)} 个镜头")
             return shots_with_prompts
@@ -536,6 +560,132 @@ class PromptOptimizer:
         except Exception as e:
             logger.error(f"提取镜头信息失败: {e}")
             return []
+    
+    def _extract_characters_from_description(self, description: str) -> str:
+        """
+        从画面描述中提取角色信息
+        
+        Args:
+            description: 画面描述文本
+            
+        Returns:
+            str: 角色列表字符串，用逗号分隔
+        """
+        try:
+            # 优先使用LLM智能提取角色
+            if self.llm_api and self.llm_api.is_configured():
+                return self._extract_characters_with_llm(description)
+            else:
+                # 如果LLM不可用，使用关键词匹配作为后备方案
+                return self._extract_characters_fallback(description)
+        except Exception as e:
+            logger.error(f"角色提取失败: {e}")
+            # 出错时使用后备方案
+            return self._extract_characters_fallback(description)
+    
+    def _extract_characters_with_llm(self, description: str) -> str:
+        """
+        使用LLM智能提取角色信息
+        
+        Args:
+            description: 画面描述文本
+            
+        Returns:
+            str: 角色列表字符串，用逗号分隔
+        """
+        try:
+            prompt = f"""请从以下画面描述中提取出现的所有角色/人物，包括但不限于：
+- 具体的人物名称（如：张三、李四、小明等）
+- 角色称谓（如：主人公、主角、男主、女主等）
+- 人物特征描述（如：光头大叔、年轻女子、老奶奶等）
+- 职业身份（如：医生、老师、警察、店主等）
+- 关系称谓（如：父亲、母亲、朋友、同事等）
+- 群体角色（如：路人、行人、顾客、学生等）
+
+画面描述：{description}
+
+请只返回角色名称，用中文顿号（、）分隔，不要包含其他解释文字。如果没有角色，请返回空字符串。
+
+示例输出格式：主人公、光头大叔、年轻女子"""
+            
+            response = self.llm_api.rewrite_text(prompt)
+            
+            if response and response.strip():
+                # 清理响应，去除可能的多余文字
+                characters_text = response.strip()
+                
+                # 去除常见的前缀和后缀
+                prefixes_to_remove = ['角色：', '人物：', '角色有：', '人物有：', '提取到的角色：', '提取的角色：']
+                for prefix in prefixes_to_remove:
+                    if characters_text.startswith(prefix):
+                        characters_text = characters_text[len(prefix):].strip()
+                
+                # 分割角色并去重
+                if '、' in characters_text:
+                    characters = [char.strip() for char in characters_text.split('、') if char.strip()]
+                elif '，' in characters_text:
+                    characters = [char.strip() for char in characters_text.split('，') if char.strip()]
+                elif ',' in characters_text:
+                    characters = [char.strip() for char in characters_text.split(',') if char.strip()]
+                else:
+                    characters = [characters_text] if characters_text else []
+                
+                # 去重并过滤空值
+                unique_characters = list(dict.fromkeys([char for char in characters if char and len(char.strip()) > 0]))
+                
+                result = '、'.join(unique_characters)
+                logger.info(f"LLM提取角色成功: {result}")
+                return result
+            else:
+                logger.warning("LLM返回空响应，使用后备方案")
+                return self._extract_characters_fallback(description)
+                
+        except Exception as e:
+            logger.error(f"LLM角色提取失败: {e}，使用后备方案")
+            return self._extract_characters_fallback(description)
+    
+    def _extract_characters_fallback(self, description: str) -> str:
+        """
+        关键词匹配的后备角色提取方案
+        
+        Args:
+            description: 画面描述文本
+            
+        Returns:
+            str: 角色列表字符串，用逗号分隔
+        """
+        characters = []
+        
+        # 扩展的角色关键词库
+        character_keywords = [
+            # 主要角色
+            '主人公', '主角', '男主', '女主', '主人翁',
+            # 基本人物类型
+            '男子', '女子', '男人', '女人', '男孩', '女孩', '孩子', '小孩',
+            '老人', '老者', '长者', '年轻人', '青年', '中年人',
+            # 家庭关系
+            '父亲', '母亲', '爸爸', '妈妈', '爷爷', '奶奶', '外公', '外婆',
+            '儿子', '女儿', '哥哥', '姐姐', '弟弟', '妹妹', '丈夫', '妻子',
+            # 职业身份
+            '医生', '护士', '老师', '教授', '学生', '警察', '军人', '士兵',
+            '司机', '工人', '农民', '商人', '老板', '经理', '秘书', '助理',
+            '服务员', '店主', '店员', '收银员', '保安', '门卫', '清洁工',
+            '厨师', '律师', '法官', '记者', '演员', '歌手', '画家', '作家',
+            # 特征描述
+            '光头大叔', '大叔', '大爷', '大妈', '阿姨', '叔叔', '婶婶',
+            '帅哥', '美女', '胖子', '瘦子', '高个子', '矮个子',
+            # 群体角色
+            '路人', '行人', '乘客', '顾客', '客人', '观众', '群众', '民众',
+            '同事', '朋友', '同学', '邻居', '陌生人'
+        ]
+        
+        for keyword in character_keywords:
+            if keyword in description:
+                characters.append(keyword)
+        
+        # 去重并返回
+        unique_characters = list(dict.fromkeys(characters))
+        return '、'.join(unique_characters) if unique_characters else ''
     
     def update_llm_api(self, llm_api):
         """

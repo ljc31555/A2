@@ -2,14 +2,32 @@ import os
 import json
 import asyncio
 from typing import Dict, List, Any, Optional
-from utils.logger import logger
+from .logger import logger
 
 class CharacterSceneManager:
     """角色场景数据库管理器 - 负责管理项目中的角色和场景一致性数据"""
     
     def __init__(self, project_root: str, service_manager=None):
         self.project_root = project_root
-        self.database_dir = os.path.join(project_root, 'character_scene_db')
+        
+        # 检测现有的角色数据库路径
+        possible_db_paths = [
+            os.path.join(project_root, 'output', 'new', 'character_scene_db'),
+            os.path.join(project_root, 'character_scene_db'),
+            os.path.join(project_root, 'src', 'character_scene_db')
+        ]
+        
+        self.database_dir = None
+        for db_path in possible_db_paths:
+            characters_file = os.path.join(db_path, 'characters.json')
+            if os.path.exists(characters_file):
+                self.database_dir = db_path
+                break
+        
+        # 如果没有找到现有数据库，使用默认路径
+        if not self.database_dir:
+            self.database_dir = os.path.join(project_root, 'character_scene_db')
+        
         os.makedirs(self.database_dir, exist_ok=True)
         
         # 数据库文件路径
