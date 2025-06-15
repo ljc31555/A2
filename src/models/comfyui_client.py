@@ -553,10 +553,11 @@ class ComfyUIClient:
 2. 适合用于AI图像生成（如Stable Diffusion）
 3. 只返回翻译后的英文提示词，不要包含其他解释
 4. 保持专业的图像生成提示词格式
+5. 不要返回与提示词翻译无关的任何内容
 """
             
             messages = [
-                {"role": "system", "content": "你是一个专业的翻译专家，擅长将中文图像生成提示词翻译成适合AI图像生成的英文提示词。"},
+                {"role": "system", "content": "你是一个专业的翻译专家，擅长将中文图像生成提示词翻译成适合AI图像生成的英文提示词。请严格按照用户要求，只返回翻译后的英文提示词，不要添加任何解释或其他内容。"},
                 {"role": "user", "content": translation_prompt}
             ]
             
@@ -579,7 +580,24 @@ class ComfyUIClient:
                 return translated_prompt
             else:
                 logger.warning(f"LLM翻译失败，返回无效结果: {translated_result}")
-                logger.warning("使用原始中文提示词")
+                logger.info("尝试使用百度翻译作为备用方案")
+                
+                # 尝试使用百度翻译
+                if is_baidu_configured():
+                    try:
+                        baidu_result = translate_text(chinese_prompt, 'zh', 'en')
+                        if baidu_result and baidu_result.strip():
+                            logger.info(f"百度翻译成功: {chinese_prompt[:50]}... -> {baidu_result[:50]}...")
+                            logger.debug(f"百度翻译完整提示词: {baidu_result}")
+                            return baidu_result
+                        else:
+                            logger.warning("百度翻译也失败了")
+                    except Exception as baidu_e:
+                        logger.error(f"百度翻译出错: {baidu_e}")
+                else:
+                    logger.warning("百度翻译未配置")
+                
+                logger.warning("所有翻译方案都失败，使用原始中文提示词")
                 return chinese_prompt
                 
         except Exception as e:
@@ -588,7 +606,24 @@ class ComfyUIClient:
             logger.error(f"错误详情: {str(e)}")
             import traceback
             logger.error(f"错误堆栈: {traceback.format_exc()}")
-            logger.warning("翻译失败，使用原始中文提示词")
+            logger.info("LLM翻译异常，尝试使用百度翻译作为备用方案")
+            
+            # 尝试使用百度翻译
+            if is_baidu_configured():
+                try:
+                    baidu_result = translate_text(chinese_prompt, 'zh', 'en')
+                    if baidu_result and baidu_result.strip():
+                        logger.info(f"百度翻译成功: {chinese_prompt[:50]}... -> {baidu_result[:50]}...")
+                        logger.debug(f"百度翻译完整提示词: {baidu_result}")
+                        return baidu_result
+                    else:
+                        logger.warning("百度翻译也失败了")
+                except Exception as baidu_e:
+                    logger.error(f"百度翻译出错: {baidu_e}")
+            else:
+                logger.warning("百度翻译未配置")
+            
+            logger.warning("所有翻译方案都失败，使用原始中文提示词")
             return chinese_prompt
     
     def _get_output_dir(self, project_manager=None, current_project_name=None) -> str:

@@ -27,6 +27,7 @@
 - 自动场景和角色一致性
 - 智能提示词优化
 - 动态效果生成
+- 双重翻译保障 (LLM + 百度翻译)
 
 ## 项目结构
 
@@ -71,8 +72,9 @@ pip install -r requirements_new.txt
 
 ### 2. 配置API密钥
 
-在 `src/config/` 目录下创建或编辑配置文件，添加你的API密钥：
+在 `config/` 目录下创建或编辑配置文件，添加你的API密钥：
 
+#### LLM配置 (config/llm_config.json)
 ```json
 {
   "llm": {
@@ -104,6 +106,28 @@ pip install -r requirements_new.txt
 }
 ```
 
+#### 百度翻译配置 (config/baidu_translate_config.py)
+```python
+# -*- coding: utf-8 -*-
+"""
+百度翻译API配置文件
+请在此文件中填入您的百度翻译API配置信息
+"""
+
+# 百度翻译API配置
+# 请到 https://fanyi-api.baidu.com/ 申请您的APP ID和密钥
+BAIDU_TRANSLATE_CONFIG = {
+    # 请将下面的占位符替换为您的实际APP ID
+    'app_id': 'your_app_id_here',
+    
+    # 请将下面的占位符替换为您的实际密钥
+    'secret_key': 'your_secret_key_here',
+    
+    # API URL（通常不需要修改）
+    'api_url': 'https://fanyi-api.baidu.com/api/trans/vip/translate'
+}
+```
+
 ### 3. 启动应用
 
 ```bash
@@ -116,6 +140,7 @@ python main.py
 - 智能文本改写和优化
 - 多种输入格式支持
 - 自动分镜生成
+- 智能中英文翻译 (LLM优先，百度翻译备用)
 
 ### 🎬 分镜生成
 - AI驱动的场景分析
@@ -231,6 +256,12 @@ python main.py
 - 动态资源管理避免内存泄漏
 
 ## 更新日志
+
+### v2.1.0 (最新版)
+- 优化LLM翻译提示词，增强翻译准确性
+- 新增百度翻译作为备用翻译方案
+- 改进翻译失败处理机制
+- 增强系统稳定性和容错能力
 
 ### v2.0.0 (重构版)
 - 全新的模块化架构
